@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cancelled GMV % — City Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg: #f7f8f7;
@@ -14,7 +15,8 @@
     --accent: #1f6f5c;      /* deep teal — "in control" signal */
     --warn: #b8722c;        /* amber — mid loss */
     --bad: #b6412f;         /* clay red — high loss */
-    --bad-bg: #fbeceA;
+    --bad-bg: #fbecea;
+    --warn-bg: #fbf1e6;
     --good-bg: #eaf3ef;
     --mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
     --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -22,7 +24,7 @@
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--sans);}
   body{padding:28px 20px 60px;}
-  .wrap{max-width:1180px;margin:0 auto;}
+  .wrap{max-width:1260px;margin:0 auto;}
 
   /* Header */
   header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:22px;border-bottom:1px solid var(--line);padding-bottom:18px;}
@@ -33,27 +35,43 @@
   .dot{width:7px;height:7px;border-radius:50%;background:#9aa39d;}
   .dot.live{background:var(--accent);}
   .dot.err{background:var(--bad);}
-  #refreshBtn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 12px;border-radius:6px;font-family:var(--sans);font-size:12.5px;cursor:pointer;}
-  #refreshBtn:hover{border-color:var(--accent);color:var(--accent);}
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 12px;border-radius:6px;font-family:var(--sans);font-size:12.5px;cursor:pointer;}
+  .btn:hover{border-color:var(--accent);color:var(--accent);}
 
   /* Summary tiles */
-  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:22px;}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px;}
   .tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;}
   .tile .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin-bottom:8px;}
-  .tile .value{font-family:var(--mono);font-size:24px;font-weight:600;letter-spacing:-0.01em;}
+  .tile .value{font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:-0.01em;}
   .tile .value.bad{color:var(--bad);}
   .tile .value.accent{color:var(--accent);}
+  .tiles-note{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin:-10px 0 18px;}
+
+  /* Filter panel */
+  .filterpanel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px;}
+  .filterpanel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+  .filterpanel-head h3{margin:0;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);}
+  .filtergrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
+  .filtergroup label{display:block;font-size:11.5px;color:var(--ink-soft);margin-bottom:6px;}
+  .filterrange{display:flex;align-items:center;gap:8px;}
+  .filterrange input{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-family:var(--mono);font-size:12.5px;background:var(--bg);}
+  .filterrange input:focus{outline:none;border-color:var(--accent);}
+  .filterrange span{color:var(--ink-soft);font-size:12px;}
+  .clearbtn{border:none;background:none;color:var(--accent);font-size:12px;cursor:pointer;font-family:var(--sans);text-decoration:underline;padding:0;}
 
   /* Controls */
   .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;}
-  #search{flex:1;min-width:220px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:var(--sans);font-size:13.5px;background:var(--panel);}
+  #search{flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:var(--sans);font-size:13.5px;background:var(--panel);}
   #search:focus{outline:none;border-color:var(--accent);}
   .sortbar{display:flex;gap:6px;flex-wrap:wrap;}
   .sortbtn{border:1px solid var(--line);background:var(--panel);padding:7px 12px;border-radius:7px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;font-family:var(--sans);}
   .sortbtn.active{border-color:var(--accent);color:var(--accent);background:var(--good-bg);}
+  .viewtoggle{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;}
+  .viewtoggle button{border:none;background:var(--panel);padding:7px 12px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;font-family:var(--sans);}
+  .viewtoggle button.active{background:var(--accent);color:#fff;}
   .count{font-family:var(--mono);font-size:12px;color:var(--ink-soft);white-space:nowrap;}
 
-  /* Table */
+  /* Table (list view) */
   .tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
   table{width:100%;border-collapse:collapse;font-size:13.5px;}
   thead th{text-align:left;padding:11px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);border-bottom:1px solid var(--line);background:#fafbfa;position:sticky;top:0;}
@@ -65,11 +83,31 @@
   .lossbar-cell{display:flex;align-items:center;gap:8px;justify-content:flex-end;}
   .lossbar-track{width:70px;height:6px;border-radius:3px;background:#eceeec;overflow:hidden;flex-shrink:0;}
   .lossbar-fill{height:100%;border-radius:3px;}
-  .pct-pill{font-family:var(--mono);font-size:12.5px;padding:2px 7px;border-radius:20px;min-width:52px;text-align:right;}
+  .pct-pill{font-family:var(--mono);font-size:12.5px;padding:2px 7px;border-radius:20px;min-width:52px;text-align:right;display:inline-block;}
+
+  /* Grid (cube) view */
+  .gridwrap{display:none;}
+  .cubegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;}
+  .cube{border-radius:10px;padding:13px 14px;border:1px solid var(--line);background:var(--panel);border-top:4px solid var(--line);transition:transform .1s ease;}
+  .cube:hover{transform:translateY(-2px);}
+  .cube.good{border-top-color:var(--accent);background:var(--good-bg);}
+  .cube.warn{border-top-color:var(--warn);background:var(--warn-bg);}
+  .cube.bad{border-top-color:var(--bad);background:var(--bad-bg);}
+  .cube-city{font-weight:700;font-size:13.5px;margin-bottom:8px;letter-spacing:0.01em;}
+  .cube-row{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:3px;}
+  .cube-row b{color:var(--ink);font-weight:600;}
+  .cube-pct{margin-top:8px;font-family:var(--mono);font-size:15px;font-weight:700;}
+  .cube.good .cube-pct{color:var(--accent);}
+  .cube.warn .cube-pct{color:var(--warn);}
+  .cube.bad .cube-pct{color:var(--bad);}
 
   .empty{padding:40px;text-align:center;color:var(--ink-soft);font-size:13.5px;}
   .errbox{background:var(--bad-bg);border:1px solid #f0cfc8;color:var(--bad);padding:14px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;font-family:var(--sans);line-height:1.5;}
   .errbox code{font-family:var(--mono);background:rgba(0,0,0,.05);padding:1px 5px;border-radius:4px;}
+
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;font-size:11.5px;color:var(--ink-soft);}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .legend i{width:9px;height:9px;border-radius:50%;display:inline-block;}
 
   footer{margin-top:22px;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);text-align:center;}
 
@@ -90,13 +128,48 @@
     <div class="status">
       <span class="dot" id="statusDot"></span>
       <span id="statusText">Connecting…</span>
-      <button id="refreshBtn" onclick="loadData()">Refresh</button>
+      <button class="btn" onclick="loadData()">Refresh</button>
+      <button class="btn" onclick="downloadExcel()">⬇ Download Excel</button>
     </div>
   </header>
 
   <div id="errorSlot"></div>
 
   <div class="tiles" id="tiles"></div>
+  <p class="tiles-note" id="tilesNote"></p>
+
+  <div class="filterpanel">
+    <div class="filterpanel-head">
+      <h3>Range filters</h3>
+      <button class="clearbtn" onclick="clearFilters()">Clear all filters</button>
+    </div>
+    <div class="filtergrid">
+      <div class="filtergroup">
+        <label>Total GMV (₹)</label>
+        <div class="filterrange">
+          <input type="number" id="gmvMin" placeholder="Min" oninput="applyFilters()">
+          <span>–</span>
+          <input type="number" id="gmvMax" placeholder="Max" oninput="applyFilters()">
+        </div>
+      </div>
+      <div class="filtergroup">
+        <label>Loss (₹, absolute)</label>
+        <div class="filterrange">
+          <input type="number" id="lossMin" placeholder="Min" oninput="applyFilters()">
+          <span>–</span>
+          <input type="number" id="lossMax" placeholder="Max" oninput="applyFilters()">
+        </div>
+      </div>
+      <div class="filtergroup">
+        <label>Loss GMV % (e.g. 50 = 50%)</label>
+        <div class="filterrange">
+          <input type="number" id="pctMin" placeholder="Min" oninput="applyFilters()">
+          <span>–</span>
+          <input type="number" id="pctMax" placeholder="Max" oninput="applyFilters()">
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="controls">
     <input id="search" type="text" placeholder="Search a city…" oninput="applyFilters()">
@@ -106,10 +179,14 @@
       <button class="sortbtn" data-key="loss" onclick="setSort('loss')">Loss ₹</button>
       <button class="sortbtn" data-key="customer_city" onclick="setSort('customer_city')">City A–Z</button>
     </div>
+    <div class="viewtoggle">
+      <button id="viewListBtn" class="active" onclick="setView('list')">☰ List</button>
+      <button id="viewGridBtn" onclick="setView('grid')">▦ Grid</button>
+    </div>
     <span class="count" id="rowCount"></span>
   </div>
 
-  <div class="tablewrap">
+  <div class="tablewrap" id="listWrap">
     <table>
       <thead>
         <tr>
@@ -121,7 +198,17 @@
       </thead>
       <tbody id="tbody"></tbody>
     </table>
-    <div class="empty" id="emptyState" style="display:none;">No cities match your search.</div>
+    <div class="empty" id="emptyStateList" style="display:none;">No cities match your filters.</div>
+  </div>
+
+  <div class="gridwrap" id="gridWrap">
+    <div class="cubegrid" id="cubegrid"></div>
+    <div class="empty" id="emptyStateGrid" style="display:none;">No cities match your filters.</div>
+    <div class="legend">
+      <span><i style="background:var(--accent)"></i> Loss % below 2.5% — healthy</span>
+      <span><i style="background:var(--warn)"></i> 2.5%–6% — watch</span>
+      <span><i style="background:var(--bad)"></i> Above 6% — critical</span>
+    </div>
   </div>
 
   <footer id="footerNote">—</footer>
@@ -133,6 +220,7 @@ const ENDPOINT = "https://script.google.com/macros/s/AKfycbw5Q9qRubW1_iZmdt0c7fa
 let rawData = [];
 let sortKey = "loss_gmv_percent";
 let sortDir = "desc";
+let viewMode = "list";
 
 function fmtINR(n){
   if (n === null || n === undefined || isNaN(n)) return "—";
@@ -142,11 +230,11 @@ function fmtPct(n){
   if (n === null || n === undefined || isNaN(n) || n === "#DIV/0!") return "—";
   return (n*100).toFixed(2) + "%";
 }
-function lossColor(pct){
-  if (pct === null || isNaN(pct)) return {fill:"#c9cdcb", pillBg:"#f1f2f1", pillFg:"var(--ink-soft)"};
-  if (pct >= 0.06) return {fill:"var(--bad)", pillBg:"var(--bad-bg)", pillFg:"var(--bad)"};
-  if (pct >= 0.025) return {fill:"var(--warn)", pillBg:"#fbf1e6", pillFg:"var(--warn)"};
-  return {fill:"var(--accent)", pillBg:"var(--good-bg)", pillFg:"var(--accent)"};
+function pctTier(pct){
+  if (pct === null || isNaN(pct)) return {tier:'neutral', fill:"#c9cdcb", pillBg:"#f1f2f1", pillFg:"var(--ink-soft)"};
+  if (pct >= 0.06) return {tier:'bad', fill:"var(--bad)", pillBg:"var(--bad-bg)", pillFg:"var(--bad)"};
+  if (pct >= 0.025) return {tier:'warn', fill:"var(--warn)", pillBg:"var(--warn-bg)", pillFg:"var(--warn)"};
+  return {tier:'good', fill:"var(--accent)", pillBg:"var(--good-bg)", pillFg:"var(--accent)"};
 }
 
 function setStatus(state, text){
@@ -174,7 +262,6 @@ async function loadData(){
 
     setStatus('live', 'Live · updated ' + new Date(json.timestamp).toLocaleString());
     document.getElementById('footerNote').textContent = 'Source: Apps Script endpoint · ' + rawData.length + ' cities loaded';
-    renderTiles(json.summary, rawData);
     applyFilters();
   }catch(err){
     setStatus('err', 'Could not load live data');
@@ -184,25 +271,35 @@ async function loadData(){
   }
 }
 
-function renderTiles(summary, data){
-  // Worst city by absolute loss volume (₹), not by loss %
-  const worst = [...data].sort((a,b)=>b.loss-a.loss)[0];
-
-  // avg_loss_percent from the backend is a ratio (e.g. 0.02 means 2%), so it needs ×100 to display correctly
-  const avgLossPctDisplay = (Number(summary.avg_loss_percent) * 100).toFixed(2) + '%';
-  const avgLossValue = summary.total_cities ? (summary.total_loss / summary.total_cities) : 0;
+// Tiles now recompute from whatever is currently filtered, so "worst city" and
+// every other number always reflect the active GMV / Loss / Loss % range filters.
+function renderTiles(rows, totalCount){
+  if(rows.length === 0){
+    document.getElementById('tiles').innerHTML = '<div class="tile"><div class="label">No matches</div><div class="value">—</div></div>';
+    document.getElementById('tilesNote').textContent = '';
+    return;
+  }
+  const totalGmv = rows.reduce((s,r)=>s+r.total_gmv,0);
+  const totalLoss = rows.reduce((s,r)=>s+r.loss,0);
+  const numericPct = rows.filter(r=>typeof r.loss_gmv_percent === 'number');
+  const avgPct = numericPct.length ? numericPct.reduce((s,r)=>s+r.loss_gmv_percent,0)/numericPct.length : 0;
+  const avgLossPerCity = totalLoss / rows.length;
+  const worst = [...rows].sort((a,b)=>b.loss-a.loss)[0];
 
   const tiles = [
-    {label:'Cities tracked', value: summary.total_cities, cls:''},
-    {label:'Total GMV', value: fmtINR(summary.total_gmv), cls:'accent'},
-    {label:'Total Loss', value: fmtINR(summary.total_loss), cls:'bad'},
-    {label:'Avg Loss %', value: avgLossPctDisplay, cls:'bad'},
-    {label:'Avg Loss / City', value: fmtINR(avgLossValue), cls:'bad'},
+    {label:'Cities shown', value: rows.length, cls:''},
+    {label:'Total GMV', value: fmtINR(totalGmv), cls:'accent'},
+    {label:'Total Loss', value: fmtINR(totalLoss), cls:'bad'},
+    {label:'Avg Loss %', value: (avgPct*100).toFixed(2)+'%', cls:'bad'},
+    {label:'Avg Loss / City', value: fmtINR(avgLossPerCity), cls:'bad'},
     {label:'Worst city (by loss ₹)', value: worst ? `${worst.customer_city} · ${fmtINR(worst.loss)}` : '—', cls:''},
   ];
   document.getElementById('tiles').innerHTML = tiles.map(t =>
     `<div class="tile"><div class="label">${t.label}</div><div class="value ${t.cls}">${t.value}</div></div>`
   ).join('');
+  document.getElementById('tilesNote').textContent = rows.length === totalCount
+    ? `Showing all ${totalCount} cities`
+    : `Filtered view — ${rows.length} of ${totalCount} cities. Tiles above reflect this filtered set.`;
 }
 
 function setSort(key){
@@ -216,9 +313,46 @@ function setSort(key){
   applyFilters();
 }
 
+function setView(mode){
+  viewMode = mode;
+  document.getElementById('viewListBtn').classList.toggle('active', mode==='list');
+  document.getElementById('viewGridBtn').classList.toggle('active', mode==='grid');
+  document.getElementById('listWrap').style.display = mode==='list' ? 'block' : 'none';
+  document.getElementById('gridWrap').style.display = mode==='grid' ? 'block' : 'none';
+}
+
+function clearFilters(){
+  ['gmvMin','gmvMax','lossMin','lossMax','pctMin','pctMax'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('search').value = '';
+  applyFilters();
+}
+
+function numOrNull(id){
+  const v = document.getElementById(id).value;
+  return v === '' ? null : Number(v);
+}
+
 function applyFilters(){
   const q = document.getElementById('search').value.trim().toUpperCase();
-  let rows = rawData.filter(d => d.customer_city.toUpperCase().includes(q));
+
+  const gmvMin = numOrNull('gmvMin'), gmvMax = numOrNull('gmvMax');
+  const lossMin = numOrNull('lossMin'), lossMax = numOrNull('lossMax');
+  const pctMinRaw = numOrNull('pctMin'), pctMaxRaw = numOrNull('pctMax');
+  // pct inputs are entered as whole percentages (e.g. 50 for 50%); data is stored as a ratio (0.5)
+  const pctMin = pctMinRaw === null ? null : pctMinRaw/100;
+  const pctMax = pctMaxRaw === null ? null : pctMaxRaw/100;
+
+  let rows = rawData.filter(d => {
+    if(!d.customer_city.toUpperCase().includes(q)) return false;
+    if(gmvMin !== null && d.total_gmv < gmvMin) return false;
+    if(gmvMax !== null && d.total_gmv > gmvMax) return false;
+    if(lossMin !== null && d.loss < lossMin) return false;
+    if(lossMax !== null && d.loss > lossMax) return false;
+    const p = typeof d.loss_gmv_percent === 'number' ? d.loss_gmv_percent : null;
+    if(pctMin !== null && (p === null || p < pctMin)) return false;
+    if(pctMax !== null && (p === null || p > pctMax)) return false;
+    return true;
+  });
 
   rows.sort((a,b)=>{
     let av = a[sortKey], bv = b[sortKey];
@@ -231,12 +365,15 @@ function applyFilters(){
   });
 
   document.getElementById('rowCount').textContent = rows.length + ' / ' + rawData.length + ' cities';
+  renderTiles(rows, rawData.length);
   renderRows(rows);
+  renderGrid(rows);
+  window._filteredRows = rows; // used by Excel export
 }
 
 function renderRows(rows){
   const tbody = document.getElementById('tbody');
-  const empty = document.getElementById('emptyState');
+  const empty = document.getElementById('emptyStateList');
   if(rows.length === 0){
     tbody.innerHTML = '';
     empty.style.display = 'block';
@@ -249,7 +386,7 @@ function renderRows(rows){
   tbody.innerHTML = rows.map(r => {
     const pct = r.loss_gmv_percent;
     const numeric = typeof pct === 'number';
-    const c = lossColor(numeric ? pct : null);
+    const c = pctTier(numeric ? pct : null);
     const width = numeric ? Math.min(100, (pct / maxPct) * 100) : 0;
     return `<tr>
       <td class="city">${r.customer_city}</td>
@@ -263,6 +400,46 @@ function renderRows(rows){
       </td>
     </tr>`;
   }).join('');
+}
+
+function renderGrid(rows){
+  const grid = document.getElementById('cubegrid');
+  const empty = document.getElementById('emptyStateGrid');
+  if(rows.length === 0){
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  grid.innerHTML = rows.map(r => {
+    const pct = r.loss_gmv_percent;
+    const numeric = typeof pct === 'number';
+    const c = pctTier(numeric ? pct : null);
+    return `<div class="cube ${c.tier}">
+      <div class="cube-city">${r.customer_city}</div>
+      <div class="cube-row"><span>GMV</span><b>${fmtINR(r.total_gmv)}</b></div>
+      <div class="cube-row"><span>Loss</span><b>${fmtINR(r.loss)}</b></div>
+      <div class="cube-pct">${fmtPct(pct)}</div>
+    </div>`;
+  }).join('');
+}
+
+function downloadExcel(){
+  const rows = window._filteredRows || rawData;
+  if(!rows.length){ alert('No rows to export — adjust your filters.'); return; }
+  const sheetData = rows.map(r => ({
+    'City': r.customer_city,
+    'Total GMV': r.total_gmv,
+    'Loss (₹)': r.loss,
+    'Loss GMV %': (typeof r.loss_gmv_percent === 'number') ? +(r.loss_gmv_percent*100).toFixed(2) : ''
+  }));
+  const ws = XLSX.utils.json_to_sheet(sheetData);
+  ws['!cols'] = [{wch:26},{wch:14},{wch:12},{wch:12}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Cancelled GMV %');
+  const stamp = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `cancelled-gmv-${stamp}.xlsx`);
 }
 
 document.querySelector('.sortbtn[data-key="loss_gmv_percent"]').classList.add('active');
