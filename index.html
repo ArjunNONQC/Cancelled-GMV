@@ -185,13 +185,20 @@ async function loadData(){
 }
 
 function renderTiles(summary, data){
-  const worst = [...data].filter(d=>typeof d.loss_gmv_percent==='number').sort((a,b)=>b.loss_gmv_percent-a.loss_gmv_percent)[0];
+  // Worst city by absolute loss volume (₹), not by loss %
+  const worst = [...data].sort((a,b)=>b.loss-a.loss)[0];
+
+  // avg_loss_percent from the backend is a ratio (e.g. 0.02 means 2%), so it needs ×100 to display correctly
+  const avgLossPctDisplay = (Number(summary.avg_loss_percent) * 100).toFixed(2) + '%';
+  const avgLossValue = summary.total_cities ? (summary.total_loss / summary.total_cities) : 0;
+
   const tiles = [
     {label:'Cities tracked', value: summary.total_cities, cls:''},
     {label:'Total GMV', value: fmtINR(summary.total_gmv), cls:'accent'},
     {label:'Total Loss', value: fmtINR(summary.total_loss), cls:'bad'},
-    {label:'Avg Loss %', value: (summary.avg_loss_percent*100 !== undefined ? Number(summary.avg_loss_percent).toFixed(2) : summary.avg_loss_percent) + '%', cls:'bad'},
-    {label:'Worst city', value: worst ? worst.customer_city : '—', cls:''},
+    {label:'Avg Loss %', value: avgLossPctDisplay, cls:'bad'},
+    {label:'Avg Loss / City', value: fmtINR(avgLossValue), cls:'bad'},
+    {label:'Worst city (by loss ₹)', value: worst ? `${worst.customer_city} · ${fmtINR(worst.loss)}` : '—', cls:''},
   ];
   document.getElementById('tiles').innerHTML = tiles.map(t =>
     `<div class="tile"><div class="label">${t.label}</div><div class="value ${t.cls}">${t.value}</div></div>`
