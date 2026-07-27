@@ -226,6 +226,10 @@ function fmtINR(n){
   if (n === null || n === undefined || isNaN(n)) return "—";
   return "₹" + Math.round(n).toLocaleString("en-IN");
 }
+function fmtCr(n){
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  return "₹" + (n/1e7).toFixed(2) + " Cr";
+}
 function fmtPct(n){
   if (n === null || n === undefined || isNaN(n) || n === "#DIV/0!") return "—";
   return (n*100).toFixed(2) + "%";
@@ -281,17 +285,15 @@ function renderTiles(rows, totalCount){
   }
   const totalGmv = rows.reduce((s,r)=>s+r.total_gmv,0);
   const totalLoss = rows.reduce((s,r)=>s+r.loss,0);
-  const numericPct = rows.filter(r=>typeof r.loss_gmv_percent === 'number');
-  const avgPct = numericPct.length ? numericPct.reduce((s,r)=>s+r.loss_gmv_percent,0)/numericPct.length : 0;
-  const avgLossPerCity = totalLoss / rows.length;
+  // Avg Loss % = Total Loss / Total GMV (overall weighted rate, not a simple average of per-city %s)
+  const avgPct = totalGmv > 0 ? totalLoss / totalGmv : 0;
   const worst = [...rows].sort((a,b)=>b.loss-a.loss)[0];
 
   const tiles = [
     {label:'Cities shown', value: rows.length, cls:''},
-    {label:'Total GMV', value: fmtINR(totalGmv), cls:'accent'},
-    {label:'Total Loss', value: fmtINR(totalLoss), cls:'bad'},
+    {label:'Total GMV', value: fmtCr(totalGmv), cls:'accent'},
+    {label:'Total Loss', value: fmtCr(totalLoss), cls:'bad'},
     {label:'Avg Loss %', value: (avgPct*100).toFixed(2)+'%', cls:'bad'},
-    {label:'Avg Loss / City', value: fmtINR(avgLossPerCity), cls:'bad'},
     {label:'Worst city (by loss ₹)', value: worst ? `${worst.customer_city} · ${fmtINR(worst.loss)}` : '—', cls:''},
   ];
   document.getElementById('tiles').innerHTML = tiles.map(t =>
