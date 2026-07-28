@@ -45,6 +45,7 @@
   .tile .value{font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:-0.01em;}
   .tile .value.bad{color:var(--bad);}
   .tile .value.accent{color:var(--accent);}
+  .tile .tile-sub{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-top:6px;}
   .tiles-note{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin:-10px 0 18px;}
 
   /* Filter panel */
@@ -111,12 +112,33 @@
 
   footer{margin-top:22px;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);text-align:center;}
 
+  /* Password lock screen */
+  #lockScreen{position:fixed;inset:0;background:#14171a;display:flex;align-items:center;justify-content:center;z-index:999;}
+  .lockbox{background:var(--panel);border-radius:12px;padding:32px 30px;width:280px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.3);}
+  .lockbox h2{font-size:16px;margin:8px 0 18px;}
+  .lockbox input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:7px;font-family:var(--sans);font-size:14px;margin-bottom:10px;}
+  .lockbox input:focus{outline:none;border-color:var(--accent);}
+  .lockbox button{width:100%;padding:10px;border:none;border-radius:7px;background:var(--accent);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;}
+  .lockbox button:hover{opacity:.9;}
+  #pwError{color:var(--bad);font-size:12px;margin-top:8px;display:none;}
+
   @media (max-width:600px){
     thead th:nth-child(2), tbody td:nth-child(2){display:none;}
   }
 </style>
 </head>
 <body>
+
+<div id="lockScreen">
+  <div class="lockbox">
+    <p class="eyebrow">Ops · Cancellations</p>
+    <h2>Enter password to view dashboard</h2>
+    <input type="password" id="pwInput" placeholder="Password" onkeydown="if(event.key==='Enter') checkPassword()">
+    <button onclick="checkPassword()">Unlock</button>
+    <p id="pwError">Incorrect password — try again.</p>
+  </div>
+</div>
+
 <div class="wrap">
 
   <header>
@@ -191,8 +213,8 @@
       <thead>
         <tr>
           <th>City</th>
-          <th>Total GMV</th>
-          <th>Loss (₹)</th>
+          <th style="text-align:right">Total GMV</th>
+          <th style="text-align:right">Loss (₹)</th>
           <th style="text-align:right">Loss GMV %</th>
         </tr>
       </thead>
@@ -217,7 +239,24 @@
 <script>
 const ENDPOINT = "https://script.google.com/macros/s/AKfycbw5Q9qRubW1_iZmdt0c7faSYjN0v2Ij0YjaS5amtAX2yQxsaG-2EaEkZ1jYcNApaxNzyA/exec";
 
+// ---- Password gate ----
+// NOTE: this is a client-side-only lock, meant to keep casual visitors out —
+// anyone who views this page's source can read the password below. Don't
+// use it to protect genuinely sensitive data; use Google's own sharing
+// permissions on the sheet/deployment for that.
+const SITE_PASSWORD = "1mg@2026"; // <-- change this to whatever password you want
+
+function checkPassword(){
+  const val = document.getElementById('pwInput').value;
+  if(val === SITE_PASSWORD){
+    document.getElementById('lockScreen').style.display = 'none';
+  }else{
+    document.getElementById('pwError').style.display = 'block';
+  }
+}
+
 let rawData = [];
+let dataAsOf = null;
 let sortKey = "loss_gmv_percent";
 let sortDir = "desc";
 let viewMode = "list";
@@ -265,6 +304,7 @@ async function loadData(){
     }));
 
     setStatus('live', 'Live · updated ' + new Date(json.timestamp).toLocaleString());
+    dataAsOf = (json.summary && json.summary.data_date) ? json.summary.data_date : null;
     document.getElementById('footerNote').textContent = 'Source: Apps Script endpoint · ' + rawData.length + ' cities loaded';
     applyFilters();
   }catch(err){
@@ -292,12 +332,12 @@ function renderTiles(rows, totalCount){
   const tiles = [
     {label:'Cities shown', value: rows.length, cls:''},
     {label:'Total GMV', value: fmtCr(totalGmv), cls:'accent'},
-    {label:'Total Loss', value: fmtCr(totalLoss), cls:'bad'},
+    {label:'Total Loss', value: fmtCr(totalLoss), cls:'bad', sub: dataAsOf ? `As of ${dataAsOf}` : ''},
     {label:'Avg Loss %', value: (avgPct*100).toFixed(2)+'%', cls:'bad'},
     {label:'Worst city (by loss ₹)', value: worst ? `${worst.customer_city} · ${fmtINR(worst.loss)}` : '—', cls:''},
   ];
   document.getElementById('tiles').innerHTML = tiles.map(t =>
-    `<div class="tile"><div class="label">${t.label}</div><div class="value ${t.cls}">${t.value}</div></div>`
+    `<div class="tile"><div class="label">${t.label}</div><div class="value ${t.cls}">${t.value}</div>${t.sub ? `<div class="tile-sub">${t.sub}</div>` : ''}</div>`
   ).join('');
   document.getElementById('tilesNote').textContent = rows.length === totalCount
     ? `Showing all ${totalCount} cities`
