@@ -78,7 +78,7 @@
   thead th{text-align:left;padding:11px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);border-bottom:1px solid var(--line);background:#fafbfa;position:sticky;top:0;}
   tbody td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:middle;}
   tbody tr:last-child td{border-bottom:none;}
-  tbody tr:hover{background:#f9faf9;}
+  tbody tr:hover{background:#f9faf9;cursor:pointer;}
   td.city{font-weight:600;letter-spacing:0.01em;}
   td.num{font-family:var(--mono);text-align:right;white-space:nowrap;}
   .lossbar-cell{display:flex;align-items:center;gap:8px;justify-content:flex-end;}
@@ -89,7 +89,7 @@
   /* Grid (cube) view */
   .gridwrap{display:none;}
   .cubegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;}
-  .cube{border-radius:10px;padding:13px 14px;border:1px solid var(--line);background:var(--panel);border-top:4px solid var(--line);transition:transform .1s ease;}
+  .cube{border-radius:10px;padding:13px 14px;border:1px solid var(--line);background:var(--panel);border-top:4px solid var(--line);transition:transform .1s ease;cursor:pointer;}
   .cube:hover{transform:translateY(-2px);}
   .cube.good{border-top-color:var(--accent);background:var(--good-bg);}
   .cube.warn{border-top-color:var(--warn);background:var(--warn-bg);}
@@ -145,7 +145,7 @@
     <div>
       <p class="eyebrow">Ops · Cancellations</p>
       <h1>Cancelled GMV % by City</h1>
-      <p class="subtitle">Live view — pulled directly from the source sheet</p>
+      <p class="subtitle">Live view — pulled directly from the source sheet · click a city for its 3‑month trend &amp; pincode breakdown</p>
     </div>
     <div class="status">
       <span class="dot" id="statusDot"></span>
@@ -244,7 +244,7 @@ const ENDPOINT = "https://script.google.com/macros/s/AKfycbw5Q9qRubW1_iZmdt0c7fa
 // anyone who views this page's source can read the password below. Don't
 // use it to protect genuinely sensitive data; use Google's own sharing
 // permissions on the sheet/deployment for that.
-const SITE_PASSWORD = "1mg2026"; // <-- change this to whatever password you want
+const SITE_PASSWORD = "1mg@2026"; // <-- change this to whatever password you want
 
 function checkPassword(){
   const val = document.getElementById('pwInput').value;
@@ -285,6 +285,12 @@ function setStatus(state, text){
   const t = document.getElementById('statusText');
   dot.className = 'dot' + (state === 'live' ? ' live' : state === 'err' ? ' err' : '');
   t.textContent = text;
+}
+
+// Opens the detail page for a city. Uses the router's ?city= param so
+// city.html can fetch its own summary/history + pincode breakdown.
+function openCity(cityName){
+  window.location.href = 'city.html?city=' + encodeURIComponent(cityName);
 }
 
 async function loadData(){
@@ -430,7 +436,7 @@ function renderRows(rows){
     const numeric = typeof pct === 'number';
     const c = pctTier(numeric ? pct : null);
     const width = numeric ? Math.min(100, (pct / maxPct) * 100) : 0;
-    return `<tr>
+    return `<tr onclick="openCity('${r.customer_city.replace(/'/g,"\\'")}')">
       <td class="city">${r.customer_city}</td>
       <td class="num">${fmtINR(r.total_gmv)}</td>
       <td class="num">${fmtINR(r.loss)}</td>
@@ -458,7 +464,7 @@ function renderGrid(rows){
     const pct = r.loss_gmv_percent;
     const numeric = typeof pct === 'number';
     const c = pctTier(numeric ? pct : null);
-    return `<div class="cube ${c.tier}">
+    return `<div class="cube ${c.tier}" onclick="openCity('${r.customer_city.replace(/'/g,"\\'")}')">
       <div class="cube-city">${r.customer_city}</div>
       <div class="cube-row"><span>GMV</span><b>${fmtINR(r.total_gmv)}</b></div>
       <div class="cube-row"><span>Loss</span><b>${fmtINR(r.loss)}</b></div>
