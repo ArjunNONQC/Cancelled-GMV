@@ -203,6 +203,7 @@
           <th style="text-align:right">Total GMV</th>
           <th style="text-align:right">Loss (₹)</th>
           <th style="text-align:right">Loss GMV %</th>
+          <th style="text-align:center">3‑Mo Trend</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
@@ -299,11 +300,25 @@ async function loadAll(){
     cityHistory = hist;
     document.getElementById('cityTitle').textContent = hist.customer_city;
 
+    function normMonth(m){
+      if(!m) return null;
+      return {
+        total_gmv: Number(m.total_gmv) || 0,
+        loss: Number(m.loss) || 0,
+        loss_gmv_percent: Number(m.loss_gmv_percent) || 0
+      };
+    }
+
     rawData = (pinJson.pincodes || []).map(p => ({
       customer_pincode: String(p.customer_pincode || ''),
       total_gmv: Number(p.total_gmv) || 0,
       loss: Number(p.loss) || 0,
-      loss_gmv_percent: (typeof p.loss_gmv_percent === 'number') ? p.loss_gmv_percent : null
+      loss_gmv_percent: (typeof p.loss_gmv_percent === 'number') ? p.loss_gmv_percent : null,
+      history: {
+        may: normMonth(p.history && p.history.may),
+        april: normMonth(p.history && p.history.april),
+        march: normMonth(p.history && p.history.march)
+      }
     }));
 
     setStatus('live', 'Live · updated ' + new Date(summaryJson.timestamp).toLocaleString());
@@ -377,6 +392,33 @@ function renderTrend(){
   document.getElementById('trendSub').textContent = missing.length
     ? `March → April → May · no data for ${missing.join(', ')} (shown as 0%)`
     : 'March → April → May';
+}
+
+// Small 3-point sparkline (March -> April -> May Loss %). Missing months
+// are treated as 0%, same rule as the big trend chart above.
+function sparklineSVG(hist){
+  if(!hist) return '';
+  const vals = [
+    hist.march ? hist.march.loss_gmv_percent : 0,
+    hist.april ? hist.april.loss_gmv_percent : 0,
+    hist.may   ? hist.may.loss_gmv_percent   : 0
+  ];
+  const w = 64, h = 24, pad = 4;
+  const maxV = Math.max(...vals, 0.001) * 1.15;
+  const x = i => pad + i * ((w - 2*pad) / (vals.length - 1));
+  const y = v => pad + (h - 2*pad) * (1 - v / maxV);
+  const pts = vals.map((v,i) => ({x: x(i), y: y(v)}));
+  const path = pts.map((p,i) => (i===0?'M':'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+  const lastColor = pctTier(vals[2]).fill;
+  const dots = pts.map((p,i) => {
+    const r = i === pts.length-1 ? 2.6 : 1.6;
+    const c = i === pts.length-1 ? lastColor : '#c9cdcb';
+    return `<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${c}"/>`;
+  }).join('');
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="display:block">
+    <path d="${path}" fill="none" stroke="${lastColor}" stroke-width="1.5"/>
+    ${dots}
+  </svg>`;
 }
 
 function setSort(key){
@@ -473,6 +515,7 @@ function renderRows(rows){
           <span class="pct-pill" style="background:${c.pillBg};color:${c.pillFg}">${fmtPct(pct)}</span>
         </div>
       </td>
+      <td style="text-align:center">${sparklineSVG(r.history)}</td>
     </tr>`;
   }).join('');
 }
@@ -496,6 +539,7 @@ function renderGrid(rows){
       <div class="cube-row"><span>GMV</span><b>${fmtINR(r.total_gmv)}</b></div>
       <div class="cube-row"><span>Loss</span><b>${fmtINR(r.loss)}</b></div>
       <div class="cube-pct">${fmtPct(pct)}</div>
+      <div style="margin-top:6px">${sparklineSVG(r.history)}</div>
     </div>`;
   }).join('');
 }
