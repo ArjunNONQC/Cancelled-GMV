@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>City Detail — Cancelled GMV %</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg: #f7f8f7;
+    --panel: #ffffff;
+    --ink: #14171a;
+    --ink-soft: #5b6268;
+    --line: #e3e6e5;
+    --accent: #1f6f5c;
+    --warn: #b8722c;
+    --bad: #b6412f;
+    --bad-bg: #fbecea;
+    --warn-bg: #fbf1e6;
+    --good-bg: #eaf3ef;
+    --mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--sans);}
+  body{padding:28px 20px 60px;}
+  .wrap{max-width:1260px;margin:0 auto;}
+
+  header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:22px;border-bottom:1px solid var(--line);padding-bottom:18px;}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 6px;}
+  .backlink{font-family:var(--mono);font-size:12px;color:var(--ink-soft);text-decoration:none;display:inline-block;margin-bottom:10px;}
+  .backlink:hover{color:var(--accent);}
+  h1{font-size:26px;margin:0;font-weight:700;letter-spacing:-0.01em;}
+  .subtitle{color:var(--ink-soft);font-size:13.5px;margin-top:4px;}
+  .status{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;color:var(--ink-soft);}
+  .dot{width:7px;height:7px;border-radius:50%;background:#9aa39d;}
+  .dot.live{background:var(--accent);}
+  .dot.err{background:var(--bad);}
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 12px;border-radius:6px;font-family:var(--sans);font-size:12.5px;cursor:pointer;}
+  .btn:hover{border-color:var(--accent);color:var(--accent);}
+
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:20px;}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;}
+  .tile .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin-bottom:8px;}
+  .tile .value{font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:-0.01em;}
+  .tile .value.bad{color:var(--bad);}
+  .tile .value.accent{color:var(--accent);}
+  .tile .tile-sub{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-top:6px;}
+
+  /* Trend chart panel */
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:20px;}
+  .panel h3{margin:0 0 4px;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);}
+  .panel .panel-sub{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:14px;}
+
+  /* Filter panel */
+  .filterpanel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px;}
+  .filterpanel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+  .filterpanel-head h3{margin:0;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);}
+  .filtergrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
+  .filtergroup label{display:block;font-size:11.5px;color:var(--ink-soft);margin-bottom:6px;}
+  .filterrange{display:flex;align-items:center;gap:8px;}
+  .filterrange input{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-family:var(--mono);font-size:12.5px;background:var(--bg);}
+  .filterrange input:focus{outline:none;border-color:var(--accent);}
+  .filterrange span{color:var(--ink-soft);font-size:12px;}
+  .clearbtn{border:none;background:none;color:var(--accent);font-size:12px;cursor:pointer;font-family:var(--sans);text-decoration:underline;padding:0;}
+
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;}
+  #search{flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:var(--sans);font-size:13.5px;background:var(--panel);}
+  #search:focus{outline:none;border-color:var(--accent);}
+  .sortbar{display:flex;gap:6px;flex-wrap:wrap;}
+  .sortbtn{border:1px solid var(--line);background:var(--panel);padding:7px 12px;border-radius:7px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;font-family:var(--sans);}
+  .sortbtn.active{border-color:var(--accent);color:var(--accent);background:var(--good-bg);}
+  .viewtoggle{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;}
+  .viewtoggle button{border:none;background:var(--panel);padding:7px 12px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;font-family:var(--sans);}
+  .viewtoggle button.active{background:var(--accent);color:#fff;}
+  .count{font-family:var(--mono);font-size:12px;color:var(--ink-soft);white-space:nowrap;}
+
+  .tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  thead th{text-align:left;padding:11px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);border-bottom:1px solid var(--line);background:#fafbfa;position:sticky;top:0;}
+  tbody td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:#f9faf9;}
+  td.city{font-weight:600;letter-spacing:0.01em;font-family:var(--mono);}
+  td.num{font-family:var(--mono);text-align:right;white-space:nowrap;}
+  .lossbar-cell{display:flex;align-items:center;gap:8px;justify-content:flex-end;}
+  .lossbar-track{width:70px;height:6px;border-radius:3px;background:#eceeec;overflow:hidden;flex-shrink:0;}
+  .lossbar-fill{height:100%;border-radius:3px;}
+  .pct-pill{font-family:var(--mono);font-size:12.5px;padding:2px 7px;border-radius:20px;min-width:52px;text-align:right;display:inline-block;}
+
+  .gridwrap{display:none;}
+  .cubegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;}
+  .cube{border-radius:10px;padding:13px 14px;border:1px solid var(--line);background:var(--panel);border-top:4px solid var(--line);transition:transform .1s ease;}
+  .cube:hover{transform:translateY(-2px);}
+  .cube.good{border-top-color:var(--accent);background:var(--good-bg);}
+  .cube.warn{border-top-color:var(--warn);background:var(--warn-bg);}
+  .cube.bad{border-top-color:var(--bad);background:var(--bad-bg);}
+  .cube-city{font-weight:700;font-size:13.5px;margin-bottom:8px;letter-spacing:0.01em;font-family:var(--mono);}
+  .cube-row{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:3px;}
+  .cube-row b{color:var(--ink);font-weight:600;}
+  .cube-pct{margin-top:8px;font-family:var(--mono);font-size:15px;font-weight:700;}
+  .cube.good .cube-pct{color:var(--accent);}
+  .cube.warn .cube-pct{color:var(--warn);}
+  .cube.bad .cube-pct{color:var(--bad);}
+
+  .empty{padding:40px;text-align:center;color:var(--ink-soft);font-size:13.5px;}
+  .errbox{background:var(--bad-bg);border:1px solid #f0cfc8;color:var(--bad);padding:14px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;font-family:var(--sans);line-height:1.5;}
+  .errbox code{font-family:var(--mono);background:rgba(0,0,0,.05);padding:1px 5px;border-radius:4px;}
+
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;font-size:11.5px;color:var(--ink-soft);}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .legend i{width:9px;height:9px;border-radius:50%;display:inline-block;}
+
+  footer{margin-top:22px;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);text-align:center;}
+
+  @media (max-width:600px){
+    thead th:nth-child(2), tbody td:nth-child(2){display:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <div>
+      <a class="backlink" href="index.html">← Back to all cities</a>
+      <p class="eyebrow">Ops · Cancellations · City Detail</p>
+      <h1 id="cityTitle">—</h1>
+      <p class="subtitle">Current month (May) summary, 3‑month trend, and pincode‑level breakdown</p>
+    </div>
+    <div class="status">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Connecting…</span>
+      <button class="btn" onclick="loadAll()">Refresh</button>
+      <button class="btn" onclick="downloadExcel()">⬇ Download Excel</button>
+    </div>
+  </header>
+
+  <div id="errorSlot"></div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="panel">
+    <h3>Loss % trend</h3>
+    <p class="panel-sub" id="trendSub">March → April → May</p>
+    <div id="trendChart"></div>
+  </div>
+
+  <div class="filterpanel">
+    <div class="filterpanel-head">
+      <h3>Pincode range filters (May)</h3>
+      <button class="clearbtn" onclick="clearFilters()">Clear all filters</button>
+    </div>
+    <div class="filtergrid">
+      <div class="filtergroup">
+        <label>Total GMV (₹)</label>
+        <div class="filterrange">
+          <input type="number" id="gmvMin" placeholder="Min" oninput="applyFilters()">
+          <span>–</span>
+          <input type="number" id="gmvMax" placeholder="Max" oninput="applyFilters()">
+        </div>
+      </div>
+      <div class="filtergroup">
+        <label>Loss (₹, absolute)</label>
+        <div class="filterrange">
+          <input type="number" id="lossMin" placeholder="Min" oninput="applyFilters()">
+          <span>–</span>
+          <input type="number" id="lossMax" placeholder="Max" oninput="applyFilters()">
+        </div>
+      </div>
+      <div class="filtergroup">
+        <label>Loss GMV % (e.g. 50 = 50%)</label>
+        <div class="filterrange">
+          <input type="number" id="pctMin" placeholder="Min" oninput="applyFilters()">
+          <span>–</span>
+          <input type="number" id="pctMax" placeholder="Max" oninput="applyFilters()">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <input id="search" type="text" placeholder="Search a pincode…" oninput="applyFilters()">
+    <div class="sortbar">
+      <button class="sortbtn" data-key="loss_gmv_percent" onclick="setSort('loss_gmv_percent')">Loss % ↓</button>
+      <button class="sortbtn" data-key="total_gmv" onclick="setSort('total_gmv')">GMV</button>
+      <button class="sortbtn" data-key="loss" onclick="setSort('loss')">Loss ₹</button>
+      <button class="sortbtn" data-key="customer_pincode" onclick="setSort('customer_pincode')">Pincode</button>
+    </div>
+    <div class="viewtoggle">
+      <button id="viewListBtn" class="active" onclick="setView('list')">☰ List</button>
+      <button id="viewGridBtn" onclick="setView('grid')">▦ Grid</button>
+    </div>
+    <span class="count" id="rowCount"></span>
+  </div>
+
+  <div class="tablewrap" id="listWrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Pincode</th>
+          <th style="text-align:right">Total GMV</th>
+          <th style="text-align:right">Loss (₹)</th>
+          <th style="text-align:right">Loss GMV %</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="emptyStateList" style="display:none;">No pincodes match your filters.</div>
+  </div>
+
+  <div class="gridwrap" id="gridWrap">
+    <div class="cubegrid" id="cubegrid"></div>
+    <div class="empty" id="emptyStateGrid" style="display:none;">No pincodes match your filters.</div>
+    <div class="legend">
+      <span><i style="background:var(--accent)"></i> Loss % below 2.5% — healthy</span>
+      <span><i style="background:var(--warn)"></i> 2.5%–6% — watch</span>
+      <span><i style="background:var(--bad)"></i> Above 6% — critical</span>
+    </div>
+  </div>
+
+  <footer id="footerNote">—</footer>
+</div>
+
+<script>
+const ENDPOINT = "https://script.google.com/macros/s/AKfycbw5Q9qRubW1_iZmdt0c7faSYjN0v2Ij0YjaS5amtAX2yQxsaG-2EaEkZ1jYcNApaxNzyA/exec";
+
+const params = new URLSearchParams(window.location.search);
+const CITY = (params.get('city') || '').trim();
+const CITY_KEY = CITY.toUpperCase();
+
+let rawData = [];       // pincode rows for this city, May only
+let cityHistory = null; // { may, april, march } loss%/gmv/loss per month for this city
+let sortKey = "loss_gmv_percent";
+let sortDir = "desc";
+let viewMode = "list";
+
+function fmtINR(n){
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  return "₹" + Math.round(n).toLocaleString("en-IN");
+}
+function fmtCr(n){
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  return "₹" + (n/1e7).toFixed(2) + " Cr";
+}
+function fmtPct(n){
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  return (n*100).toFixed(2) + "%";
+}
+function pctTier(pct){
+  if (pct === null || isNaN(pct)) return {tier:'neutral', fill:"#c9cdcb", pillBg:"#f1f2f1", pillFg:"var(--ink-soft)"};
+  if (pct >= 0.06) return {tier:'bad', fill:"var(--bad)", pillBg:"var(--bad-bg)", pillFg:"var(--bad)"};
+  if (pct >= 0.025) return {tier:'warn', fill:"var(--warn)", pillBg:"var(--warn-bg)", pillFg:"var(--warn)"};
+  return {tier:'good', fill:"var(--accent)", pillBg:"var(--good-bg)", pillFg:"var(--accent)"};
+}
+
+function setStatus(state, text){
+  const dot = document.getElementById('statusDot');
+  const t = document.getElementById('statusText');
+  dot.className = 'dot' + (state === 'live' ? ' live' : state === 'err' ? ' err' : '');
+  t.textContent = text;
+}
+
+function showError(msg){
+  document.getElementById('errorSlot').innerHTML =
+    '<div class="errbox"><strong>Couldn\'t load this city.</strong> ' + msg + '</div>';
+}
+
+async function loadAll(){
+  if(!CITY_KEY){
+    showError('No city was specified in the URL. Go back and click a city from the main dashboard.');
+    setStatus('err', 'No city specified');
+    return;
+  }
+  document.getElementById('cityTitle').textContent = CITY;
+  setStatus('loading', 'Fetching city data…');
+  document.getElementById('errorSlot').innerHTML = '';
+
+  try{
+    const [summaryRes, pinRes] = await Promise.all([
+      fetch(ENDPOINT, {cache:"no-store"}),
+      fetch(ENDPOINT + '?city=' + encodeURIComponent(CITY_KEY), {cache:"no-store"})
+    ]);
+
+    if(!summaryRes.ok) throw new Error("Summary HTTP " + summaryRes.status);
+    if(!pinRes.ok) throw new Error("Pincode HTTP " + pinRes.status);
+
+    const summaryJson = await summaryRes.json();
+    const pinJson = await pinRes.json();
+
+    if(!summaryJson.success) throw new Error(summaryJson.error || "Unknown error from script");
+    if(!pinJson.success) throw new Error(pinJson.error || "Unknown error from script");
+
+    const hist = (summaryJson.history && summaryJson.history[CITY_KEY]) || null;
+    if(!hist || !hist.may){
+      throw new Error("City \"" + CITY + "\" was not found in May's data.");
+    }
+    cityHistory = hist;
+    document.getElementById('cityTitle').textContent = hist.customer_city;
+
+    rawData = (pinJson.pincodes || []).map(p => ({
+      customer_pincode: String(p.customer_pincode || ''),
+      total_gmv: Number(p.total_gmv) || 0,
+      loss: Number(p.loss) || 0,
+      loss_gmv_percent: (typeof p.loss_gmv_percent === 'number') ? p.loss_gmv_percent : null
+    }));
+
+    setStatus('live', 'Live · updated ' + new Date(summaryJson.timestamp).toLocaleString());
+    document.getElementById('footerNote').textContent = 'Source: Apps Script endpoint · ' + rawData.length + ' pincodes loaded for ' + hist.customer_city;
+
+    renderTiles();
+    renderTrend();
+    applyFilters();
+  }catch(err){
+    setStatus('err', 'Could not load city data');
+    showError('Details: <code>' + (err.message || err) + '</code>');
+  }
+}
+
+function renderTiles(){
+  const may = cityHistory.may;
+  const tiles = [
+    {label:'Total GMV (May)', value: fmtCr(may.total_gmv), cls:'accent'},
+    {label:'Total Loss (May)', value: fmtCr(may.loss), cls:'bad'},
+    {label:'Loss GMV % (May)', value: fmtPct(may.loss_gmv_percent), cls:'bad'},
+  ];
+  document.getElementById('tiles').innerHTML = tiles.map(t =>
+    `<div class="tile"><div class="label">${t.label}</div><div class="value ${t.cls}">${t.value}</div></div>`
+  ).join('');
+}
+
+// Simple inline SVG line chart. Missing months are shown as 0%.
+function renderTrend(){
+  const months = [
+    {label:'March', pct: cityHistory.march ? cityHistory.march.loss_gmv_percent : 0},
+    {label:'April', pct: cityHistory.april ? cityHistory.april.loss_gmv_percent : 0},
+    {label:'May',   pct: cityHistory.may   ? cityHistory.may.loss_gmv_percent   : 0}
+  ];
+
+  const w = 700, h = 220, padL = 50, padR = 30, padT = 20, padB = 36;
+  const maxPct = Math.max(...months.map(m => m.pct), 0.01) * 1.2;
+  const x = i => padL + (i * (w - padL - padR) / (months.length - 1));
+  const y = pct => padT + (h - padT - padB) * (1 - pct / maxPct);
+
+  const points = months.map((m,i) => ({x: x(i), y: y(m.pct), ...m}));
+  const path = points.map((p,i) => (i===0?'M':'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+
+  // gridlines (4 horizontal bands)
+  let gridLines = '';
+  for(let g=0; g<=4; g++){
+    const gy = padT + (h - padT - padB) * (g/4);
+    const val = maxPct * (1 - g/4);
+    gridLines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="#e3e6e5" stroke-width="1"/>`;
+    gridLines += `<text x="${padL-8}" y="${gy+4}" font-family="var(--mono)" font-size="10.5" fill="#5b6268" text-anchor="end">${(val*100).toFixed(1)}%</text>`;
+  }
+
+  const dots = points.map(p => {
+    const c = pctTier(p.pct);
+    return `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="${c.fill}" stroke="#fff" stroke-width="2"/>
+            <text x="${p.x}" y="${p.y-12}" font-family="var(--mono)" font-size="11.5" font-weight="600" fill="${c.fill}" text-anchor="middle">${fmtPct(p.pct)}</text>
+            <text x="${p.x}" y="${h-padB+20}" font-family="var(--mono)" font-size="11.5" fill="#14171a" text-anchor="middle">${p.label}</text>`;
+  }).join('');
+
+  const svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" xmlns="http://www.w3.org/2000/svg">
+    ${gridLines}
+    <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+    ${dots}
+  </svg>`;
+
+  document.getElementById('trendChart').innerHTML = svg;
+
+  const missing = [];
+  if(!cityHistory.march) missing.push('March');
+  if(!cityHistory.april) missing.push('April');
+  if(!cityHistory.may) missing.push('May');
+  document.getElementById('trendSub').textContent = missing.length
+    ? `March → April → May · no data for ${missing.join(', ')} (shown as 0%)`
+    : 'March → April → May';
+}
+
+function setSort(key){
+  if(sortKey === key){
+    sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+  }else{
+    sortKey = key;
+    sortDir = key === 'customer_pincode' ? 'asc' : 'desc';
+  }
+  document.querySelectorAll('.sortbtn').forEach(b=>b.classList.toggle('active', b.dataset.key===sortKey));
+  applyFilters();
+}
+
+function setView(mode){
+  viewMode = mode;
+  document.getElementById('viewListBtn').classList.toggle('active', mode==='list');
+  document.getElementById('viewGridBtn').classList.toggle('active', mode==='grid');
+  document.getElementById('listWrap').style.display = mode==='list' ? 'block' : 'none';
+  document.getElementById('gridWrap').style.display = mode==='grid' ? 'block' : 'none';
+}
+
+function clearFilters(){
+  ['gmvMin','gmvMax','lossMin','lossMax','pctMin','pctMax'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('search').value = '';
+  applyFilters();
+}
+
+function numOrNull(id){
+  const v = document.getElementById(id).value;
+  return v === '' ? null : Number(v);
+}
+
+function applyFilters(){
+  const q = document.getElementById('search').value.trim().toUpperCase();
+
+  const gmvMin = numOrNull('gmvMin'), gmvMax = numOrNull('gmvMax');
+  const lossMin = numOrNull('lossMin'), lossMax = numOrNull('lossMax');
+  const pctMinRaw = numOrNull('pctMin'), pctMaxRaw = numOrNull('pctMax');
+  const pctMin = pctMinRaw === null ? null : pctMinRaw/100;
+  const pctMax = pctMaxRaw === null ? null : pctMaxRaw/100;
+
+  let rows = rawData.filter(d => {
+    if(!d.customer_pincode.toUpperCase().includes(q)) return false;
+    if(gmvMin !== null && d.total_gmv < gmvMin) return false;
+    if(gmvMax !== null && d.total_gmv > gmvMax) return false;
+    if(lossMin !== null && d.loss < lossMin) return false;
+    if(lossMax !== null && d.loss > lossMax) return false;
+    const p = typeof d.loss_gmv_percent === 'number' ? d.loss_gmv_percent : null;
+    if(pctMin !== null && (p === null || p < pctMin)) return false;
+    if(pctMax !== null && (p === null || p > pctMax)) return false;
+    return true;
+  });
+
+  rows.sort((a,b)=>{
+    let av = a[sortKey], bv = b[sortKey];
+    if(sortKey === 'customer_pincode'){
+      return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    }
+    av = (typeof av === 'number') ? av : -Infinity;
+    bv = (typeof bv === 'number') ? bv : -Infinity;
+    return sortDir === 'asc' ? av - bv : bv - av;
+  });
+
+  document.getElementById('rowCount').textContent = rows.length + ' / ' + rawData.length + ' pincodes';
+  renderRows(rows);
+  renderGrid(rows);
+  window._filteredRows = rows;
+}
+
+function renderRows(rows){
+  const tbody = document.getElementById('tbody');
+  const empty = document.getElementById('emptyStateList');
+  if(rows.length === 0){
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  const maxPct = Math.max(...rows.map(r => typeof r.loss_gmv_percent==='number' ? r.loss_gmv_percent : 0), 0.0001);
+
+  tbody.innerHTML = rows.map(r => {
+    const pct = r.loss_gmv_percent;
+    const numeric = typeof pct === 'number';
+    const c = pctTier(numeric ? pct : null);
+    const width = numeric ? Math.min(100, (pct / maxPct) * 100) : 0;
+    return `<tr>
+      <td class="city">${r.customer_pincode}</td>
+      <td class="num">${fmtINR(r.total_gmv)}</td>
+      <td class="num">${fmtINR(r.loss)}</td>
+      <td class="num">
+        <div class="lossbar-cell">
+          <div class="lossbar-track"><div class="lossbar-fill" style="width:${width}%;background:${c.fill}"></div></div>
+          <span class="pct-pill" style="background:${c.pillBg};color:${c.pillFg}">${fmtPct(pct)}</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderGrid(rows){
+  const grid = document.getElementById('cubegrid');
+  const empty = document.getElementById('emptyStateGrid');
+  if(rows.length === 0){
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  grid.innerHTML = rows.map(r => {
+    const pct = r.loss_gmv_percent;
+    const numeric = typeof pct === 'number';
+    const c = pctTier(numeric ? pct : null);
+    return `<div class="cube ${c.tier}">
+      <div class="cube-city">${r.customer_pincode}</div>
+      <div class="cube-row"><span>GMV</span><b>${fmtINR(r.total_gmv)}</b></div>
+      <div class="cube-row"><span>Loss</span><b>${fmtINR(r.loss)}</b></div>
+      <div class="cube-pct">${fmtPct(pct)}</div>
+    </div>`;
+  }).join('');
+}
+
+function downloadExcel(){
+  const rows = window._filteredRows || rawData;
+  if(!rows.length){ alert('No rows to export — adjust your filters.'); return; }
+  const sheetData = rows.map(r => ({
+    'Pincode': r.customer_pincode,
+    'Total GMV': r.total_gmv,
+    'Loss (₹)': r.loss,
+    'Loss GMV %': (typeof r.loss_gmv_percent === 'number') ? +(r.loss_gmv_percent*100).toFixed(2) : ''
+  }));
+  const ws = XLSX.utils.json_to_sheet(sheetData);
+  ws['!cols'] = [{wch:14},{wch:14},{wch:12},{wch:12}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, (cityHistory ? cityHistory.customer_city : 'City') + ' Pincodes');
+  const stamp = new Date().toISOString().slice(0,10);
+  const cityForFile = (cityHistory ? cityHistory.customer_city : CITY).toLowerCase().replace(/[^a-z0-9]+/g,'-');
+  XLSX.writeFile(wb, `pincodes-${cityForFile}-${stamp}.xlsx`);
+}
+
+document.querySelector('.sortbtn[data-key="loss_gmv_percent"]').classList.add('active');
+loadAll();
+</script>
+</body>
+</html>
