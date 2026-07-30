@@ -48,6 +48,11 @@
   .tile .tile-sub{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-top:6px;}
   .tiles-note{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin:-10px 0 18px;}
 
+  /* Trend chart panel */
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:20px;}
+  .panel h3{margin:0 0 4px;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);}
+  .panel .panel-sub{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:14px;}
+
   /* Filter panel */
   .filterpanel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px;}
   .filterpanel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
@@ -160,6 +165,12 @@
   <div class="tiles" id="tiles"></div>
   <p class="tiles-note" id="tilesNote"></p>
 
+  <div class="panel">
+    <h3>Pan-India Loss % trend</h3>
+    <p class="panel-sub" id="trendSub">March → April → May</p>
+    <div id="trendChart"></div>
+  </div>
+
   <div class="filterpanel">
     <div class="filterpanel-head">
       <h3>Range filters</h3>
@@ -244,7 +255,7 @@ const ENDPOINT = "https://script.google.com/macros/s/AKfycbw5Q9qRubW1_iZmdt0c7fa
 // anyone who views this page's source can read the password below. Don't
 // use it to protect genuinely sensitive data; use Google's own sharing
 // permissions on the sheet/deployment for that.
-const SITE_PASSWORD = "1mg@2026"; // <-- change this to whatever password you want
+const SITE_PASSWORD = "1mg2026"; // <-- change this to whatever password you want
 const UNLOCK_KEY = "gmvDashboardUnlocked";
 
 // If already unlocked earlier in this browser session (e.g. came back from
@@ -267,6 +278,7 @@ function checkPassword(){
 }
 
 let rawData = [];
+let historyData = {}; // { CITY_KEY: {customer_city, may, april, march} } — all cities, all 3 months
 let dataAsOf = null;
 let sortKey = "loss_gmv_percent";
 let sortDir = "desc";
@@ -319,6 +331,7 @@ async function loadData(){
       loss: Number(d.loss) || 0,
       loss_gmv_percent: (typeof d.loss_gmv_percent === 'number') ? d.loss_gmv_percent : null
     }));
+    historyData = json.history || {}; // reused for the pan-India trend chart, no extra fetch needed
 
     setStatus('live', 'Live · updated ' + new Date(json.timestamp).toLocaleString());
     dataAsOf = (json.summary && json.summary.data_date) ? json.summary.data_date : null;
@@ -359,6 +372,75 @@ function renderTiles(rows, totalCount){
   document.getElementById('tilesNote').textContent = rows.length === totalCount
     ? `Showing all ${totalCount} cities`
     : `Filtered view — ${rows.length} of ${totalCount} cities. Tiles above reflect this filtered set.`;
+}
+
+// Pan-India Loss % trend across March/April/May, aggregated from whatever
+// cities currently pass the active filters. Uses history data already
+// fetched in loadData() — no extra network call, so this recomputes
+// instantly on every filter change. A city missing a given month simply
+// contributes 0/0 to that month's totals, so it doesn't skew the ratio.
+function renderPanIndiaTrend(rows){
+  const totals = {
+    march: {gmv:0, loss:0},
+    april: {gmv:0, loss:0},
+    may:   {gmv:0, loss:0}
+  };
+  let missingMonths = new Set();
+
+  rows.forEach(r => {
+    const h = historyData[r.customer_city.toUpperCase()];
+    if (!h) return;
+    ['march','april','may'].forEach(m => {
+      if (h[m]) {
+        totals[m].gmv += h[m].total_gmv;
+        totals[m].loss += h[m].loss;
+      } else {
+        missingMonths.add(m);
+      }
+    });
+  });
+
+  const months = [
+    {label:'March', pct: totals.march.gmv > 0 ? totals.march.loss/totals.march.gmv : 0, loss: totals.march.loss},
+    {label:'April', pct: totals.april.gmv > 0 ? totals.april.loss/totals.april.gmv : 0, loss: totals.april.loss},
+    {label:'May',   pct: totals.may.gmv   > 0 ? totals.may.loss/totals.may.gmv     : 0, loss: totals.may.loss}
+  ];
+
+  const w = 700, h = 240, padL = 60, padR = 30, padT = 40, padB = 36;
+  const maxPct = Math.max(...months.map(m => m.pct), 0.01) * 1.2;
+  const x = i => padL + (i * (w - padL - padR) / (months.length - 1));
+  const y = pct => padT + (h - padT - padB) * (1 - pct / maxPct);
+
+  const points = months.map((m,i) => ({x: x(i), y: y(m.pct), ...m}));
+  const path = points.map((p,i) => (i===0?'M':'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+
+  let gridLines = '';
+  for(let g=0; g<=4; g++){
+    const gy = padT + (h - padT - padB) * (g/4);
+    const val = maxPct * (1 - g/4);
+    gridLines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="#e3e6e5" stroke-width="1"/>`;
+    gridLines += `<text x="${padL-8}" y="${gy+4}" font-family="var(--mono)" font-size="10.5" fill="#5b6268" text-anchor="end">${(val*100).toFixed(1)}%</text>`;
+  }
+
+  const dots = points.map(p => {
+    const c = pctTier(p.pct);
+    return `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="${c.fill}" stroke="#fff" stroke-width="2"/>
+            <text x="${p.x}" y="${p.y-24}" font-family="var(--mono)" font-size="11" fill="#5b6268" text-anchor="middle">${fmtINR(p.loss)}</text>
+            <text x="${p.x}" y="${p.y-11}" font-family="var(--mono)" font-size="12" font-weight="600" fill="${c.fill}" text-anchor="middle">${fmtPct(p.pct)}</text>
+            <text x="${p.x}" y="${h-padB+20}" font-family="var(--mono)" font-size="11.5" fill="#14171a" text-anchor="middle">${p.label}</text>`;
+  }).join('');
+
+  const svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" xmlns="http://www.w3.org/2000/svg">
+    ${gridLines}
+    <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+    ${dots}
+  </svg>`;
+
+  document.getElementById('trendChart').innerHTML = svg;
+
+  document.getElementById('trendSub').textContent = missingMonths.size
+    ? `March → April → May · reflects ${rows.length} currently filtered cities (some cities are missing data for one or more months, treated as 0 for that month)`
+    : `March → April → May · reflects ${rows.length} currently filtered cities`;
 }
 
 function setSort(key){
@@ -425,6 +507,7 @@ function applyFilters(){
 
   document.getElementById('rowCount').textContent = rows.length + ' / ' + rawData.length + ' cities';
   renderTiles(rows, rawData.length);
+  renderPanIndiaTrend(rows);
   renderRows(rows);
   renderGrid(rows);
   window._filteredRows = rows; // used by Excel export
