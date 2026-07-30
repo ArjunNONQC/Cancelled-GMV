@@ -337,7 +337,7 @@ function renderTiles(){
   const may = cityHistory.may;
   const tiles = [
     {label:'Total GMV (May)', value: fmtCr(may.total_gmv), cls:'accent'},
-    {label:'Total Loss (May)', value: fmtCr(may.loss), cls:'bad'},
+    {label:'Total Loss (May)', value: fmtINR(may.loss), cls:'bad'},
     {label:'Loss GMV % (May)', value: fmtPct(may.loss_gmv_percent), cls:'bad'},
   ];
   document.getElementById('tiles').innerHTML = tiles.map(t =>
@@ -348,12 +348,12 @@ function renderTiles(){
 // Simple inline SVG line chart. Missing months are shown as 0%.
 function renderTrend(){
   const months = [
-    {label:'March', pct: cityHistory.march ? cityHistory.march.loss_gmv_percent : 0},
-    {label:'April', pct: cityHistory.april ? cityHistory.april.loss_gmv_percent : 0},
-    {label:'May',   pct: cityHistory.may   ? cityHistory.may.loss_gmv_percent   : 0}
+    {label:'March', pct: cityHistory.march ? cityHistory.march.loss_gmv_percent : 0, loss: cityHistory.march ? cityHistory.march.loss : 0},
+    {label:'April', pct: cityHistory.april ? cityHistory.april.loss_gmv_percent : 0, loss: cityHistory.april ? cityHistory.april.loss : 0},
+    {label:'May',   pct: cityHistory.may   ? cityHistory.may.loss_gmv_percent   : 0, loss: cityHistory.may   ? cityHistory.may.loss   : 0}
   ];
 
-  const w = 700, h = 220, padL = 50, padR = 30, padT = 20, padB = 36;
+  const w = 700, h = 240, padL = 50, padR = 30, padT = 40, padB = 36;
   const maxPct = Math.max(...months.map(m => m.pct), 0.01) * 1.2;
   const x = i => padL + (i * (w - padL - padR) / (months.length - 1));
   const y = pct => padT + (h - padT - padB) * (1 - pct / maxPct);
@@ -373,7 +373,8 @@ function renderTrend(){
   const dots = points.map(p => {
     const c = pctTier(p.pct);
     return `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="${c.fill}" stroke="#fff" stroke-width="2"/>
-            <text x="${p.x}" y="${p.y-12}" font-family="var(--mono)" font-size="11.5" font-weight="600" fill="${c.fill}" text-anchor="middle">${fmtPct(p.pct)}</text>
+            <text x="${p.x}" y="${p.y-24}" font-family="var(--mono)" font-size="11" fill="#5b6268" text-anchor="middle">${fmtINR(p.loss)}</text>
+            <text x="${p.x}" y="${p.y-11}" font-family="var(--mono)" font-size="12" font-weight="600" fill="${c.fill}" text-anchor="middle">${fmtPct(p.pct)}</text>
             <text x="${p.x}" y="${h-padB+20}" font-family="var(--mono)" font-size="11.5" fill="#14171a" text-anchor="middle">${p.label}</text>`;
   }).join('');
 
