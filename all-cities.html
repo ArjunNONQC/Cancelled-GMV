@@ -231,6 +231,22 @@
 <script>
 const ENDPOINT = "https://script.google.com/macros/s/AKfycbw5Q9qRubW1_iZmdt0c7faSYjN0v2Ij0YjaS5amtAX2yQxsaG-2EaEkZ1jYcNApaxNzyA/exec";
 
+// Apps Script Web Apps occasionally return a transient error (often HTTP 404,
+// sometimes 502) that clears up on its own within a second or two — this
+// retries a couple of times before giving up, so a transient blip doesn't
+// force a manual refresh.
+async function fetchWithRetry(url, options, retries = 2, delayMs = 700) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if (res.ok || attempt === retries) return res;
+    } catch (err) {
+      if (attempt === retries) throw err;
+    }
+    await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
+  }
+}
+
 let rawData = [];
 let historyData = {}; // { CITY_KEY: {customer_city, may, april, march} } — all cities, all 3 months
 let dataAsOf = null;
@@ -274,7 +290,7 @@ async function loadData(){
   setStatus('loading', 'Fetching latest data…');
   document.getElementById('errorSlot').innerHTML = '';
   try{
-    const res = await fetch(ENDPOINT, {cache:"no-store"});
+    const res = await fetchWithRetry(ENDPOINT, {cache:"no-store"});
     if(!res.ok) throw new Error("HTTP " + res.status);
     const json = await res.json();
     if(!json.success) throw new Error(json.error || "Unknown error from script");
