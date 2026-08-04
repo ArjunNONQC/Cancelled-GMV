@@ -291,8 +291,8 @@ function getEligibleCities(thresholdPct){
   return eligible;
 }
 
-function trendInfo(marchPct, mayPct){
-  const diff = mayPct - marchPct;
+function trendInfo(aprilPct, mayPct){
+  const diff = mayPct - aprilPct;
   if (diff > 0.0005) return { cls: 'up', symbol: '↑', label: 'Worsening' };
   if (diff < -0.0005) return { cls: 'down', symbol: '↓', label: 'Improving' };
   return { cls: 'flat', symbol: '→', label: 'Stable' };
@@ -353,7 +353,7 @@ function renderGrid(eligible){
   grid.innerHTML = eligible.map(r => {
     const mPct = r.march.loss_gmv_percent, aPct = r.april.loss_gmv_percent, yPct = r.may.loss_gmv_percent;
     const tier = pctTier(yPct);
-    const trend = trendInfo(mPct, yPct);
+    const trend = trendInfo(aPct, yPct);
     return `<div class="pcard ${tier.tier}" onclick="openCity('${r.customer_city.replace(/'/g,"\\'")}')">
       <div class="pcard-top">
         <div class="pcard-city">${r.customer_city}</div>
