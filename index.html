@@ -3,8 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cancelled GMV % — City Dashboard</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<title>Cities Needing Attention — Cancelled GMV %</title>
 <style>
   :root{
     --bg: #f7f8f7;
@@ -28,15 +27,18 @@
 
   /* Header */
   header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:22px;border-bottom:1px solid var(--line);padding-bottom:18px;}
-  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 6px;}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--bad);margin:0 0 6px;}
   h1{font-size:26px;margin:0;font-weight:700;letter-spacing:-0.01em;}
-  .subtitle{color:var(--ink-soft);font-size:13.5px;margin-top:4px;}
+  .subtitle{color:var(--ink-soft);font-size:13.5px;margin-top:4px;max-width:560px;}
+  .headerRight{display:flex;flex-direction:column;align-items:flex-end;gap:10px;}
   .status{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;color:var(--ink-soft);}
   .dot{width:7px;height:7px;border-radius:50%;background:#9aa39d;}
   .dot.live{background:var(--accent);}
   .dot.err{background:var(--bad);}
   .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 12px;border-radius:6px;font-family:var(--sans);font-size:12.5px;cursor:pointer;}
   .btn:hover{border-color:var(--accent);color:var(--accent);}
+  .btn-primary{border:1px solid var(--ink);background:var(--ink);color:#fff;padding:9px 16px;border-radius:7px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block;}
+  .btn-primary:hover{opacity:.85;}
 
   /* Summary tiles */
   .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px;}
@@ -45,75 +47,51 @@
   .tile .value{font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:-0.01em;}
   .tile .value.bad{color:var(--bad);}
   .tile .value.accent{color:var(--accent);}
-  .tile .tile-sub{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-top:6px;}
-  .tiles-note{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin:-10px 0 18px;}
-
-  /* Trend chart panel */
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:20px;}
-  .panel h3{margin:0 0 4px;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);}
-  .panel .panel-sub{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:14px;}
 
   /* Filter panel */
-  .filterpanel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px;}
-  .filterpanel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
-  .filterpanel-head h3{margin:0;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);}
-  .filtergrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
-  .filtergroup label{display:block;font-size:11.5px;color:var(--ink-soft);margin-bottom:6px;}
-  .filterrange{display:flex;align-items:center;gap:8px;}
-  .filterrange input{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-family:var(--mono);font-size:12.5px;background:var(--bg);}
-  .filterrange input:focus{outline:none;border-color:var(--accent);}
-  .filterrange span{color:var(--ink-soft);font-size:12px;}
-  .clearbtn{border:none;background:none;color:var(--accent);font-size:12px;cursor:pointer;font-family:var(--sans);text-decoration:underline;padding:0;}
+  .filterpanel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:20px;}
+  .filterpanel h3{margin:0 0 4px;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);}
+  .filterpanel .fp-sub{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:14px;}
+  .fp-row{display:flex;flex-wrap:wrap;align-items:center;gap:14px;}
+  .fp-input-group{display:flex;align-items:center;gap:8px;}
+  .fp-input-group label{font-size:13px;color:var(--ink);white-space:nowrap;}
+  #thresholdInput{width:90px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;font-family:var(--mono);font-size:14px;background:var(--bg);text-align:center;}
+  #thresholdInput:focus{outline:none;border-color:var(--accent);}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;}
+  .chip{border:1px solid var(--line);background:var(--panel);padding:6px 12px;border-radius:20px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;font-family:var(--mono);}
+  .chip:hover{border-color:var(--accent);color:var(--accent);}
+  .chip.active{background:var(--ink);border-color:var(--ink);color:#fff;}
+  .resetlink{border:none;background:none;color:var(--accent);font-size:12.5px;cursor:pointer;font-family:var(--sans);text-decoration:underline;padding:0;margin-left:auto;}
 
-  /* Controls */
-  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;}
-  #search{flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:var(--sans);font-size:13.5px;background:var(--panel);}
-  #search:focus{outline:none;border-color:var(--accent);}
-  .sortbar{display:flex;gap:6px;flex-wrap:wrap;}
-  .sortbtn{border:1px solid var(--line);background:var(--panel);padding:7px 12px;border-radius:7px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;font-family:var(--sans);}
-  .sortbtn.active{border-color:var(--accent);color:var(--accent);background:var(--good-bg);}
-  .viewtoggle{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;}
-  .viewtoggle button{border:none;background:var(--panel);padding:7px 12px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;font-family:var(--sans);}
-  .viewtoggle button.active{background:var(--accent);color:#fff;}
-  .count{font-family:var(--mono);font-size:12px;color:var(--ink-soft);white-space:nowrap;}
-
-  /* Table (list view) */
-  .tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
-  table{width:100%;border-collapse:collapse;font-size:13.5px;}
-  thead th{text-align:left;padding:11px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);border-bottom:1px solid var(--line);background:#fafbfa;position:sticky;top:0;}
-  tbody td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:middle;}
-  tbody tr:last-child td{border-bottom:none;}
-  tbody tr:hover{background:#f9faf9;cursor:pointer;}
-  td.city{font-weight:600;letter-spacing:0.01em;}
-  td.num{font-family:var(--mono);text-align:right;white-space:nowrap;}
-  .lossbar-cell{display:flex;align-items:center;gap:8px;justify-content:flex-end;}
-  .lossbar-track{width:70px;height:6px;border-radius:3px;background:#eceeec;overflow:hidden;flex-shrink:0;}
-  .lossbar-fill{height:100%;border-radius:3px;}
-  .pct-pill{font-family:var(--mono);font-size:12.5px;padding:2px 7px;border-radius:20px;min-width:52px;text-align:right;display:inline-block;}
-
-  /* Grid (cube) view */
-  .gridwrap{display:none;}
-  .cubegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;}
-  .cube{border-radius:10px;padding:13px 14px;border:1px solid var(--line);background:var(--panel);border-top:4px solid var(--line);transition:transform .1s ease;cursor:pointer;}
-  .cube:hover{transform:translateY(-2px);}
-  .cube.good{border-top-color:var(--accent);background:var(--good-bg);}
-  .cube.warn{border-top-color:var(--warn);background:var(--warn-bg);}
-  .cube.bad{border-top-color:var(--bad);background:var(--bad-bg);}
-  .cube-city{font-weight:700;font-size:13.5px;margin-bottom:8px;letter-spacing:0.01em;}
-  .cube-row{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:3px;}
-  .cube-row b{color:var(--ink);font-weight:600;}
-  .cube-pct{margin-top:8px;font-family:var(--mono);font-size:15px;font-weight:700;}
-  .cube.good .cube-pct{color:var(--accent);}
-  .cube.warn .cube-pct{color:var(--warn);}
-  .cube.bad .cube-pct{color:var(--bad);}
-
-  .empty{padding:40px;text-align:center;color:var(--ink-soft);font-size:13.5px;}
   .errbox{background:var(--bad-bg);border:1px solid #f0cfc8;color:var(--bad);padding:14px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;font-family:var(--sans);line-height:1.5;}
   .errbox code{font-family:var(--mono);background:rgba(0,0,0,.05);padding:1px 5px;border-radius:4px;}
 
-  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;font-size:11.5px;color:var(--ink-soft);}
-  .legend span{display:inline-flex;align-items:center;gap:6px;}
-  .legend i{width:9px;height:9px;border-radius:50%;display:inline-block;}
+  /* Rich card grid */
+  .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;}
+  .pcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;border-top:5px solid var(--line);cursor:pointer;transition:transform .1s ease, box-shadow .1s ease;}
+  .pcard:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.06);}
+  .pcard.good{border-top-color:var(--accent);background:var(--good-bg);}
+  .pcard.warn{border-top-color:var(--warn);background:var(--warn-bg);}
+  .pcard.bad{border-top-color:var(--bad);background:var(--bad-bg);}
+  .pcard-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;}
+  .pcard-city{font-weight:700;font-size:15px;letter-spacing:0.01em;}
+  .pcard-trend{font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:20px;white-space:nowrap;font-weight:600;}
+  .pcard-trend.up{background:var(--bad-bg);color:var(--bad);}
+  .pcard-trend.down{background:var(--good-bg);color:var(--accent);}
+  .pcard-trend.flat{background:var(--warn-bg);color:var(--warn);}
+  .pcard-pct{font-family:var(--mono);font-size:32px;font-weight:700;line-height:1;letter-spacing:-0.01em;}
+  .pcard.bad .pcard-pct{color:var(--bad);}
+  .pcard.warn .pcard-pct{color:var(--warn);}
+  .pcard.good .pcard-pct{color:var(--accent);}
+  .pcard-pct-label{font-family:var(--mono);font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;}
+  .pcard-months{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:10px;}
+  .pcard-spark{margin-bottom:12px;}
+  .pcard-stats{display:flex;justify-content:space-between;border-top:1px solid rgba(0,0,0,.06);padding-top:10px;}
+  .pcard-stats div{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);}
+  .pcard-stats b{color:var(--ink);font-weight:600;display:block;font-size:13px;margin-top:2px;}
+
+  .empty{padding:60px 20px;text-align:center;color:var(--ink-soft);font-size:14px;background:var(--panel);border:1px dashed var(--line);border-radius:12px;}
+  .empty .empty-big{font-size:17px;font-weight:600;color:var(--ink);margin-bottom:6px;}
 
   footer{margin-top:22px;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);text-align:center;}
 
@@ -126,17 +104,13 @@
   .lockbox button{width:100%;padding:10px;border:none;border-radius:7px;background:var(--accent);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;}
   .lockbox button:hover{opacity:.9;}
   #pwError{color:var(--bad);font-size:12px;margin-top:8px;display:none;}
-
-  @media (max-width:600px){
-    thead th:nth-child(2), tbody td:nth-child(2){display:none;}
-  }
 </style>
 </head>
 <body>
 
 <div id="lockScreen">
   <div class="lockbox">
-    <p class="eyebrow">Ops · Cancellations</p>
+    <p class="eyebrow" style="color:var(--accent)">Ops · Cancellations</p>
     <h2>Enter password to view dashboard</h2>
     <input type="password" id="pwInput" placeholder="Password" onkeydown="if(event.key==='Enter') checkPassword()">
     <button onclick="checkPassword()">Unlock</button>
@@ -148,100 +122,45 @@
 
   <header>
     <div>
-      <p class="eyebrow">Ops · Cancellations</p>
-      <h1>Cancelled GMV % by City</h1>
-      <p class="subtitle">Live view — pulled directly from the source sheet · click a city for its 3‑month trend &amp; pincode breakdown</p>
+      <p class="eyebrow">Ops · Cancellations · Needs Action</p>
+      <h1>Cities Needing Attention</h1>
+      <p class="subtitle">Cities whose Loss GMV % has stayed at or above the threshold for March, April, <b>and</b> May — not a one-off spike. Click a city to see its pincode-level breakdown.</p>
     </div>
-    <div class="status">
-      <span class="dot" id="statusDot"></span>
-      <span id="statusText">Connecting…</span>
-      <button class="btn" onclick="loadData()">Refresh</button>
-      <button class="btn" onclick="downloadExcel()">⬇ Download Excel</button>
+    <div class="headerRight">
+      <div class="status">
+        <span class="dot" id="statusDot"></span>
+        <span id="statusText">Connecting…</span>
+        <button class="btn" onclick="loadData()">Refresh</button>
+      </div>
+      <a class="btn-primary" href="all-cities.html">📋 All Cities</a>
     </div>
   </header>
 
   <div id="errorSlot"></div>
 
   <div class="tiles" id="tiles"></div>
-  <p class="tiles-note" id="tilesNote"></p>
-
-  <div class="panel">
-    <h3>Pan-India Loss % trend</h3>
-    <p class="panel-sub" id="trendSub">March → April → May</p>
-    <div id="trendChart"></div>
-  </div>
 
   <div class="filterpanel">
-    <div class="filterpanel-head">
-      <h3>Range filters</h3>
-      <button class="clearbtn" onclick="clearFilters()">Clear all filters</button>
-    </div>
-    <div class="filtergrid">
-      <div class="filtergroup">
-        <label>Total GMV (₹)</label>
-        <div class="filterrange">
-          <input type="number" id="gmvMin" placeholder="Min" oninput="applyFilters()">
-          <span>–</span>
-          <input type="number" id="gmvMax" placeholder="Max" oninput="applyFilters()">
-        </div>
+    <h3>Threshold</h3>
+    <p class="fp-sub">Show cities where Loss GMV % was ≥ this value in March, April, AND May</p>
+    <div class="fp-row">
+      <div class="fp-input-group">
+        <label for="thresholdInput">Loss % ≥</label>
+        <input type="number" id="thresholdInput" value="10" min="0" max="100" step="0.5" oninput="onThresholdChange()">
+        <label for="thresholdInput">%</label>
       </div>
-      <div class="filtergroup">
-        <label>Loss (₹, absolute)</label>
-        <div class="filterrange">
-          <input type="number" id="lossMin" placeholder="Min" oninput="applyFilters()">
-          <span>–</span>
-          <input type="number" id="lossMax" placeholder="Max" oninput="applyFilters()">
-        </div>
+      <div class="chips" id="chips">
+        <button class="chip" data-val="7" onclick="setThreshold(7)">7%</button>
+        <button class="chip active" data-val="10" onclick="setThreshold(10)">10%</button>
+        <button class="chip" data-val="15" onclick="setThreshold(15)">15%</button>
+        <button class="chip" data-val="20" onclick="setThreshold(20)">20%</button>
       </div>
-      <div class="filtergroup">
-        <label>Loss GMV % (e.g. 50 = 50%)</label>
-        <div class="filterrange">
-          <input type="number" id="pctMin" placeholder="Min" oninput="applyFilters()">
-          <span>–</span>
-          <input type="number" id="pctMax" placeholder="Max" oninput="applyFilters()">
-        </div>
-      </div>
+      <button class="resetlink" onclick="setThreshold(10)">Reset to 10%</button>
     </div>
   </div>
 
-  <div class="controls">
-    <input id="search" type="text" placeholder="Search a city…" oninput="applyFilters()">
-    <div class="sortbar">
-      <button class="sortbtn" data-key="loss_gmv_percent" onclick="setSort('loss_gmv_percent')">Loss % ↓</button>
-      <button class="sortbtn" data-key="total_gmv" onclick="setSort('total_gmv')">GMV</button>
-      <button class="sortbtn" data-key="loss" onclick="setSort('loss')">Loss ₹</button>
-      <button class="sortbtn" data-key="customer_city" onclick="setSort('customer_city')">City A–Z</button>
-    </div>
-    <div class="viewtoggle">
-      <button id="viewListBtn" class="active" onclick="setView('list')">☰ List</button>
-      <button id="viewGridBtn" onclick="setView('grid')">▦ Grid</button>
-    </div>
-    <span class="count" id="rowCount"></span>
-  </div>
-
-  <div class="tablewrap" id="listWrap">
-    <table>
-      <thead>
-        <tr>
-          <th>City</th>
-          <th style="text-align:right">Total GMV</th>
-          <th style="text-align:right">Loss (₹)</th>
-          <th style="text-align:right">Loss GMV %</th>
-        </tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
-    <div class="empty" id="emptyStateList" style="display:none;">No cities match your filters.</div>
-  </div>
-
-  <div class="gridwrap" id="gridWrap">
-    <div class="cubegrid" id="cubegrid"></div>
-    <div class="empty" id="emptyStateGrid" style="display:none;">No cities match your filters.</div>
-    <div class="legend">
-      <span><i style="background:var(--accent)"></i> Loss % below 2.5% — healthy</span>
-      <span><i style="background:var(--warn)"></i> 2.5%–6% — watch</span>
-      <span><i style="background:var(--bad)"></i> Above 6% — critical</span>
-    </div>
+  <div id="gridSlot">
+    <div class="cardgrid" id="cardgrid"></div>
   </div>
 
   <footer id="footerNote">—</footer>
@@ -250,19 +169,11 @@
 <script>
 const ENDPOINT = "https://script.google.com/macros/s/AKfycbw5Q9qRubW1_iZmdt0c7faSYjN0v2Ij0YjaS5amtAX2yQxsaG-2EaEkZ1jYcNApaxNzyA/exec";
 
-// ---- Password gate ----
-// NOTE: this is a client-side-only lock, meant to keep casual visitors out —
-// anyone who views this page's source can read the password below. Don't
-// use it to protect genuinely sensitive data; use Google's own sharing
-// permissions on the sheet/deployment for that.
+// ---- Password gate (same password/session key as the rest of the dashboard,
+// so unlocking here also unlocks all-cities.html and vice versa) ----
 const SITE_PASSWORD = "1mg@2026"; // <-- change this to whatever password you want
 const UNLOCK_KEY = "gmvDashboardUnlocked";
 
-// If already unlocked earlier in this browser session (e.g. came back from
-// a city detail page, or hit refresh), skip the lock screen entirely.
-// Uses sessionStorage, so it stays unlocked until the browser tab/window is
-// closed, then asks again next time — swap to localStorage below if you'd
-// rather it stay unlocked across browser restarts too.
 if (sessionStorage.getItem(UNLOCK_KEY) === '1') {
   document.getElementById('lockScreen').style.display = 'none';
 }
@@ -277,12 +188,9 @@ function checkPassword(){
   }
 }
 
-let rawData = [];
-let historyData = {}; // { CITY_KEY: {customer_city, may, april, march} } — all cities, all 3 months
+let historyData = {};   // { CITY_KEY: {customer_city, may, april, march} } — all cities, all 3 months
 let dataAsOf = null;
-let sortKey = "loss_gmv_percent";
-let sortDir = "desc";
-let viewMode = "list";
+let threshold = 10;     // percent, e.g. 10 means 10%
 
 function fmtINR(n){
   if (n === null || n === undefined || isNaN(n)) return "—";
@@ -292,15 +200,20 @@ function fmtCr(n){
   if (n === null || n === undefined || isNaN(n)) return "—";
   return "₹" + (n/1e7).toFixed(2) + " Cr";
 }
+function fmtLakh(n){
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  if (Math.abs(n) >= 1e7) return fmtCr(n);
+  return "₹" + (n/1e5).toFixed(2) + "L";
+}
 function fmtPct(n){
-  if (n === null || n === undefined || isNaN(n) || n === "#DIV/0!") return "—";
+  if (typeof n !== 'number' || isNaN(n)) return "—";
   return (n*100).toFixed(2) + "%";
 }
 function pctTier(pct){
-  if (pct === null || isNaN(pct)) return {tier:'neutral', fill:"#c9cdcb", pillBg:"#f1f2f1", pillFg:"var(--ink-soft)"};
-  if (pct >= 0.06) return {tier:'bad', fill:"var(--bad)", pillBg:"var(--bad-bg)", pillFg:"var(--bad)"};
-  if (pct >= 0.025) return {tier:'warn', fill:"var(--warn)", pillBg:"var(--warn-bg)", pillFg:"var(--warn)"};
-  return {tier:'good', fill:"var(--accent)", pillBg:"var(--good-bg)", pillFg:"var(--accent)"};
+  if (typeof pct !== 'number' || isNaN(pct)) return {tier:'neutral', fill:"#c9cdcb"};
+  if (pct >= 0.06) return {tier:'bad', fill:"var(--bad)"};
+  if (pct >= 0.025) return {tier:'warn', fill:"var(--warn)"};
+  return {tier:'good', fill:"var(--accent)"};
 }
 
 function setStatus(state, text){
@@ -310,8 +223,6 @@ function setStatus(state, text){
   t.textContent = text;
 }
 
-// Opens the detail page for a city. Uses the router's ?city= param so
-// city.html can fetch its own summary/history + pincode breakdown.
 function openCity(cityName){
   window.location.href = 'city.html?city=' + encodeURIComponent(cityName);
 }
@@ -325,266 +236,152 @@ async function loadData(){
     const json = await res.json();
     if(!json.success) throw new Error(json.error || "Unknown error from script");
 
-    rawData = json.data.map(d => ({
-      customer_city: d.customer_city,
-      total_gmv: Number(d.total_gmv) || 0,
-      loss: Number(d.loss) || 0,
-      loss_gmv_percent: (typeof d.loss_gmv_percent === 'number') ? d.loss_gmv_percent : null
-    }));
-    historyData = json.history || {}; // reused for the pan-India trend chart, no extra fetch needed
+    historyData = json.history || {};
+    dataAsOf = (json.summary && json.summary.data_date) ? json.summary.data_date : null;
 
     setStatus('live', 'Live · updated ' + new Date(json.timestamp).toLocaleString());
-    dataAsOf = (json.summary && json.summary.data_date) ? json.summary.data_date : null;
-    document.getElementById('footerNote').textContent = 'Source: Apps Script endpoint · ' + rawData.length + ' cities loaded';
-    applyFilters();
+    render();
   }catch(err){
     setStatus('err', 'Could not load live data');
     document.getElementById('errorSlot').innerHTML =
-      '<div class="errbox"><strong>Couldn\'t reach the sheet.</strong> This usually means the deployment\'s access isn\'t set to "Anyone," or the link is domain-restricted so it won\'t load for people outside your org viewing this page. '
+      '<div class="errbox"><strong>Couldn\'t reach the sheet.</strong> This usually means the deployment\'s access isn\'t set to "Anyone," or the link is domain-restricted. '
       + 'In Apps Script → Deploy → Manage deployments, confirm "Who has access" is set to Anyone. Details: <code>' + (err.message || err) + '</code></div>';
   }
 }
 
-// Tiles now recompute from whatever is currently filtered, so "worst city" and
-// every other number always reflect the active GMV / Loss / Loss % range filters.
-function renderTiles(rows, totalCount){
-  if(rows.length === 0){
-    document.getElementById('tiles').innerHTML = '<div class="tile"><div class="label">No matches</div><div class="value">—</div></div>';
-    document.getElementById('tilesNote').textContent = '';
-    return;
-  }
-  const totalGmv = rows.reduce((s,r)=>s+r.total_gmv,0);
-  const totalLoss = rows.reduce((s,r)=>s+r.loss,0);
-  // Avg Loss % = Total Loss / Total GMV (overall weighted rate, not a simple average of per-city %s)
-  const avgPct = totalGmv > 0 ? totalLoss / totalGmv : 0;
-  const worst = [...rows].sort((a,b)=>b.loss-a.loss)[0];
+// A city qualifies only if it has data for ALL THREE months (March, April, May)
+// AND every one of those three months' Loss GMV % is >= the chosen threshold.
+// A city missing a month (e.g. no March record) is excluded rather than assumed
+// 0% or ignored — we can't call a trend "consistent" without all 3 data points.
+function getEligibleCities(thresholdPct){
+  const thresholdRatio = thresholdPct / 100;
+  const eligible = [];
 
-  const tiles = [
-    {label:'Cities shown', value: rows.length, cls:''},
-    {label:'Total GMV', value: fmtCr(totalGmv), cls:'accent'},
-    {label:'Total Loss', value: fmtCr(totalLoss), cls:'bad', sub: dataAsOf ? `Period: ${dataAsOf}` : ''},
-    {label:'Avg Loss %', value: (avgPct*100).toFixed(2)+'%', cls:'bad'},
-    {label:'Worst city (by loss ₹)', value: worst ? `${worst.customer_city} · ${fmtINR(worst.loss)}` : '—', cls:''},
-  ];
-  document.getElementById('tiles').innerHTML = tiles.map(t =>
-    `<div class="tile"><div class="label">${t.label}</div><div class="value ${t.cls}">${t.value}</div>${t.sub ? `<div class="tile-sub">${t.sub}</div>` : ''}</div>`
-  ).join('');
-  document.getElementById('tilesNote').textContent = rows.length === totalCount
-    ? `Showing all ${totalCount} cities`
-    : `Filtered view — ${rows.length} of ${totalCount} cities. Tiles above reflect this filtered set.`;
-}
+  Object.keys(historyData).forEach(key => {
+    const h = historyData[key];
+    if (!h.march || !h.april || !h.may) return; // incomplete history -> excluded
 
-// Pan-India Loss % trend across March/April/May, aggregated from whatever
-// cities currently pass the active filters. Uses history data already
-// fetched in loadData() — no extra network call, so this recomputes
-// instantly on every filter change. A city missing a given month simply
-// contributes 0/0 to that month's totals, so it doesn't skew the ratio.
-function renderPanIndiaTrend(rows){
-  const totals = {
-    march: {gmv:0, loss:0},
-    april: {gmv:0, loss:0},
-    may:   {gmv:0, loss:0}
-  };
-  let missingMonths = new Set();
+    const mPct = h.march.loss_gmv_percent;
+    const aPct = h.april.loss_gmv_percent;
+    const yPct = h.may.loss_gmv_percent;
 
-  rows.forEach(r => {
-    const h = historyData[r.customer_city.toUpperCase()];
-    if (!h) return;
-    ['march','april','may'].forEach(m => {
-      if (h[m]) {
-        totals[m].gmv += h[m].total_gmv;
-        totals[m].loss += h[m].loss;
-      } else {
-        missingMonths.add(m);
-      }
-    });
+    if (mPct >= thresholdRatio && aPct >= thresholdRatio && yPct >= thresholdRatio) {
+      eligible.push({ customer_city: h.customer_city, march: h.march, april: h.april, may: h.may });
+    }
   });
 
-  const months = [
-    {label:'March', pct: totals.march.gmv > 0 ? totals.march.loss/totals.march.gmv : 0, loss: totals.march.loss},
-    {label:'April', pct: totals.april.gmv > 0 ? totals.april.loss/totals.april.gmv : 0, loss: totals.april.loss},
-    {label:'May',   pct: totals.may.gmv   > 0 ? totals.may.loss/totals.may.gmv     : 0, loss: totals.may.loss}
-  ];
+  // Worst first, by current (May) Loss %
+  eligible.sort((a, b) => b.may.loss_gmv_percent - a.may.loss_gmv_percent);
+  return eligible;
+}
 
-  const w = 700, h = 240, padL = 60, padR = 30, padT = 40, padB = 36;
-  const maxPct = Math.max(...months.map(m => m.pct), 0.01) * 1.2;
-  const x = i => padL + (i * (w - padL - padR) / (months.length - 1));
-  const y = pct => padT + (h - padT - padB) * (1 - pct / maxPct);
+function trendInfo(marchPct, mayPct){
+  const diff = mayPct - marchPct;
+  if (diff > 0.0005) return { cls: 'up', symbol: '↑', label: 'Worsening' };
+  if (diff < -0.0005) return { cls: 'down', symbol: '↓', label: 'Improving' };
+  return { cls: 'flat', symbol: '→', label: 'Stable' };
+}
 
-  const points = months.map((m,i) => ({x: x(i), y: y(m.pct), ...m}));
-  const path = points.map((p,i) => (i===0?'M':'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
-
-  let gridLines = '';
-  for(let g=0; g<=4; g++){
-    const gy = padT + (h - padT - padB) * (g/4);
-    const val = maxPct * (1 - g/4);
-    gridLines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="#e3e6e5" stroke-width="1"/>`;
-    gridLines += `<text x="${padL-8}" y="${gy+4}" font-family="var(--mono)" font-size="10.5" fill="#5b6268" text-anchor="end">${(val*100).toFixed(1)}%</text>`;
-  }
-
-  const dots = points.map(p => {
-    const c = pctTier(p.pct);
-    return `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="${c.fill}" stroke="#fff" stroke-width="2"/>
-            <text x="${p.x}" y="${p.y-24}" font-family="var(--mono)" font-size="11" fill="#5b6268" text-anchor="middle">${fmtINR(p.loss)}</text>
-            <text x="${p.x}" y="${p.y-11}" font-family="var(--mono)" font-size="12" font-weight="600" fill="${c.fill}" text-anchor="middle">${fmtPct(p.pct)}</text>
-            <text x="${p.x}" y="${h-padB+20}" font-family="var(--mono)" font-size="11.5" fill="#14171a" text-anchor="middle">${p.label}</text>`;
+function sparklineSVG(march, april, may){
+  const vals = [march, april, may];
+  const w = 100, h = 30, pad = 4;
+  const maxV = Math.max(...vals, 0.001) * 1.15;
+  const x = i => pad + i * ((w - 2*pad) / (vals.length - 1));
+  const y = v => pad + (h - 2*pad) * (1 - v / maxV);
+  const pts = vals.map((v,i) => ({x: x(i), y: y(v)}));
+  const path = pts.map((p,i) => (i===0?'M':'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+  const lastColor = pctTier(vals[2]).fill;
+  const dots = pts.map((p,i) => {
+    const r = i === pts.length-1 ? 3 : 2;
+    const c = i === pts.length-1 ? lastColor : '#c9cdcb';
+    return `<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${c}"/>`;
   }).join('');
-
-  const svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" xmlns="http://www.w3.org/2000/svg">
-    ${gridLines}
-    <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="display:block">
+    <path d="${path}" fill="none" stroke="${lastColor}" stroke-width="1.5"/>
     ${dots}
   </svg>`;
-
-  document.getElementById('trendChart').innerHTML = svg;
-
-  document.getElementById('trendSub').textContent = missingMonths.size
-    ? `March → April → May · reflects ${rows.length} currently filtered cities (some cities are missing data for one or more months, treated as 0 for that month)`
-    : `March → April → May · reflects ${rows.length} currently filtered cities`;
 }
 
-function setSort(key){
-  if(sortKey === key){
-    sortDir = sortDir === 'desc' ? 'asc' : 'desc';
-  }else{
-    sortKey = key;
-    sortDir = key === 'customer_city' ? 'asc' : 'desc';
-  }
-  document.querySelectorAll('.sortbtn').forEach(b=>b.classList.toggle('active', b.dataset.key===sortKey));
-  applyFilters();
-}
-
-function setView(mode){
-  viewMode = mode;
-  document.getElementById('viewListBtn').classList.toggle('active', mode==='list');
-  document.getElementById('viewGridBtn').classList.toggle('active', mode==='grid');
-  document.getElementById('listWrap').style.display = mode==='list' ? 'block' : 'none';
-  document.getElementById('gridWrap').style.display = mode==='grid' ? 'block' : 'none';
-}
-
-function clearFilters(){
-  ['gmvMin','gmvMax','lossMin','lossMax','pctMin','pctMax'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('search').value = '';
-  applyFilters();
-}
-
-function numOrNull(id){
-  const v = document.getElementById(id).value;
-  return v === '' ? null : Number(v);
-}
-
-function applyFilters(){
-  const q = document.getElementById('search').value.trim().toUpperCase();
-
-  const gmvMin = numOrNull('gmvMin'), gmvMax = numOrNull('gmvMax');
-  const lossMin = numOrNull('lossMin'), lossMax = numOrNull('lossMax');
-  const pctMinRaw = numOrNull('pctMin'), pctMaxRaw = numOrNull('pctMax');
-  // pct inputs are entered as whole percentages (e.g. 50 for 50%); data is stored as a ratio (0.5)
-  const pctMin = pctMinRaw === null ? null : pctMinRaw/100;
-  const pctMax = pctMaxRaw === null ? null : pctMaxRaw/100;
-
-  let rows = rawData.filter(d => {
-    if(!d.customer_city.toUpperCase().includes(q)) return false;
-    if(gmvMin !== null && d.total_gmv < gmvMin) return false;
-    if(gmvMax !== null && d.total_gmv > gmvMax) return false;
-    if(lossMin !== null && d.loss < lossMin) return false;
-    if(lossMax !== null && d.loss > lossMax) return false;
-    const p = typeof d.loss_gmv_percent === 'number' ? d.loss_gmv_percent : null;
-    if(pctMin !== null && (p === null || p < pctMin)) return false;
-    if(pctMax !== null && (p === null || p > pctMax)) return false;
-    return true;
-  });
-
-  rows.sort((a,b)=>{
-    let av = a[sortKey], bv = b[sortKey];
-    if(sortKey === 'customer_city'){
-      return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
-    }
-    av = (typeof av === 'number') ? av : -Infinity;
-    bv = (typeof bv === 'number') ? bv : -Infinity;
-    return sortDir === 'asc' ? av - bv : bv - av;
-  });
-
-  document.getElementById('rowCount').textContent = rows.length + ' / ' + rawData.length + ' cities';
-  renderTiles(rows, rawData.length);
-  renderPanIndiaTrend(rows);
-  renderRows(rows);
-  renderGrid(rows);
-  window._filteredRows = rows; // used by Excel export
-}
-
-function renderRows(rows){
-  const tbody = document.getElementById('tbody');
-  const empty = document.getElementById('emptyStateList');
-  if(rows.length === 0){
-    tbody.innerHTML = '';
-    empty.style.display = 'block';
+function renderTiles(eligible){
+  if (eligible.length === 0){
+    document.getElementById('tiles').innerHTML = `
+      <div class="tile"><div class="label">Cities at risk</div><div class="value bad">0</div></div>
+      <div class="tile"><div class="label">Threshold</div><div class="value">≥ ${threshold}%</div></div>
+    `;
     return;
   }
-  empty.style.display = 'none';
+  const totalGmv = eligible.reduce((s,r)=>s+r.may.total_gmv,0);
+  const totalLoss = eligible.reduce((s,r)=>s+r.may.loss,0);
+  const avgPct = totalGmv > 0 ? totalLoss/totalGmv : 0;
 
-  const maxPct = Math.max(...rows.map(r => typeof r.loss_gmv_percent==='number' ? r.loss_gmv_percent : 0), 0.0001);
-
-  tbody.innerHTML = rows.map(r => {
-    const pct = r.loss_gmv_percent;
-    const numeric = typeof pct === 'number';
-    const c = pctTier(numeric ? pct : null);
-    const width = numeric ? Math.min(100, (pct / maxPct) * 100) : 0;
-    return `<tr onclick="openCity('${r.customer_city.replace(/'/g,"\\'")}')">
-      <td class="city">${r.customer_city}</td>
-      <td class="num">${fmtINR(r.total_gmv)}</td>
-      <td class="num">${fmtINR(r.loss)}</td>
-      <td class="num">
-        <div class="lossbar-cell">
-          <div class="lossbar-track"><div class="lossbar-fill" style="width:${width}%;background:${c.fill}"></div></div>
-          <span class="pct-pill" style="background:${c.pillBg};color:${c.pillFg}">${fmtPct(pct)}</span>
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
+  const tiles = [
+    {label:'Cities at risk', value: eligible.length, cls:'bad'},
+    {label:'Total Loss (May)', value: fmtCr(totalLoss), cls:'bad'},
+    {label:'Avg Loss % (May)', value: (avgPct*100).toFixed(2)+'%', cls:'bad'},
+    {label:'Threshold applied', value: '≥ ' + threshold + '%', cls:''},
+  ];
+  document.getElementById('tiles').innerHTML = tiles.map(t =>
+    `<div class="tile"><div class="label">${t.label}</div><div class="value ${t.cls}">${t.value}</div></div>`
+  ).join('');
 }
 
-function renderGrid(rows){
-  const grid = document.getElementById('cubegrid');
-  const empty = document.getElementById('emptyStateGrid');
-  if(rows.length === 0){
-    grid.innerHTML = '';
-    empty.style.display = 'block';
+function renderGrid(eligible){
+  const slot = document.getElementById('gridSlot');
+  if (eligible.length === 0){
+    slot.innerHTML = `<div class="empty"><div class="empty-big">No city in this % range</div>Try lowering the threshold above to widen the search.</div>`;
     return;
   }
-  empty.style.display = 'none';
+  slot.innerHTML = '<div class="cardgrid" id="cardgrid"></div>';
+  const grid = document.getElementById('cardgrid');
 
-  grid.innerHTML = rows.map(r => {
-    const pct = r.loss_gmv_percent;
-    const numeric = typeof pct === 'number';
-    const c = pctTier(numeric ? pct : null);
-    return `<div class="cube ${c.tier}" onclick="openCity('${r.customer_city.replace(/'/g,"\\'")}')">
-      <div class="cube-city">${r.customer_city}</div>
-      <div class="cube-row"><span>GMV</span><b>${fmtINR(r.total_gmv)}</b></div>
-      <div class="cube-row"><span>Loss</span><b>${fmtINR(r.loss)}</b></div>
-      <div class="cube-pct">${fmtPct(pct)}</div>
+  grid.innerHTML = eligible.map(r => {
+    const mPct = r.march.loss_gmv_percent, aPct = r.april.loss_gmv_percent, yPct = r.may.loss_gmv_percent;
+    const tier = pctTier(yPct);
+    const trend = trendInfo(mPct, yPct);
+    return `<div class="pcard ${tier.tier}" onclick="openCity('${r.customer_city.replace(/'/g,"\\'")}')">
+      <div class="pcard-top">
+        <div class="pcard-city">${r.customer_city}</div>
+        <div class="pcard-trend ${trend.cls}">${trend.symbol} ${trend.label}</div>
+      </div>
+      <div class="pcard-pct">${fmtPct(yPct)}</div>
+      <div class="pcard-pct-label">Loss GMV % · May</div>
+      <div class="pcard-months">Mar ${fmtPct(mPct)} · Apr ${fmtPct(aPct)} · May ${fmtPct(yPct)}</div>
+      <div class="pcard-spark">${sparklineSVG(mPct, aPct, yPct)}</div>
+      <div class="pcard-stats">
+        <div>GMV<b>${fmtLakh(r.may.total_gmv)}</b></div>
+        <div>Loss<b>${fmtLakh(r.may.loss)}</b></div>
+      </div>
     </div>`;
   }).join('');
+
+  document.getElementById('footerNote').textContent = eligible.length + ' cit' + (eligible.length===1?'y':'ies') + ' shown, worst first · Source: Apps Script endpoint';
 }
 
-function downloadExcel(){
-  const rows = window._filteredRows || rawData;
-  if(!rows.length){ alert('No rows to export — adjust your filters.'); return; }
-  const sheetData = rows.map(r => ({
-    'City': r.customer_city,
-    'Total GMV': r.total_gmv,
-    'Loss (₹)': r.loss,
-    'Loss GMV %': (typeof r.loss_gmv_percent === 'number') ? +(r.loss_gmv_percent*100).toFixed(2) : ''
-  }));
-  const ws = XLSX.utils.json_to_sheet(sheetData);
-  ws['!cols'] = [{wch:26},{wch:14},{wch:12},{wch:12}];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Cancelled GMV %');
-  const stamp = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, `cancelled-gmv-${stamp}.xlsx`);
+function render(){
+  const eligible = getEligibleCities(threshold);
+  renderTiles(eligible);
+  renderGrid(eligible);
+  updateChipStates();
 }
 
-document.querySelector('.sortbtn[data-key="loss_gmv_percent"]').classList.add('active');
+function setThreshold(val){
+  threshold = val;
+  document.getElementById('thresholdInput').value = val;
+  render();
+}
+
+function onThresholdChange(){
+  const v = Number(document.getElementById('thresholdInput').value);
+  threshold = isNaN(v) ? 0 : v;
+  render();
+}
+
+function updateChipStates(){
+  document.querySelectorAll('.chip').forEach(c => {
+    c.classList.toggle('active', Number(c.dataset.val) === threshold);
+  });
+}
+
 loadData();
 </script>
 </body>
