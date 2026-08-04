@@ -227,6 +227,22 @@
 <script>
 const ENDPOINT = "https://script.google.com/macros/s/AKfycbw5Q9qRubW1_iZmdt0c7faSYjN0v2Ij0YjaS5amtAX2yQxsaG-2EaEkZ1jYcNApaxNzyA/exec";
 
+// Apps Script Web Apps occasionally return a transient error (often HTTP 404,
+// sometimes 502) that clears up on its own within a second or two — this
+// retries a couple of times before giving up, so a transient blip doesn't
+// force a manual refresh.
+async function fetchWithRetry(url, options, retries = 2, delayMs = 700) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if (res.ok || attempt === retries) return res;
+    } catch (err) {
+      if (attempt === retries) throw err;
+    }
+    await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
+  }
+}
+
 const params = new URLSearchParams(window.location.search);
 const CITY = (params.get('city') || '').trim();
 const CITY_KEY = CITY.toUpperCase();
@@ -279,21 +295,16 @@ async function loadAll(){
   document.getElementById('errorSlot').innerHTML = '';
 
   try{
-    const [summaryRes, pinRes] = await Promise.all([
-      fetch(ENDPOINT, {cache:"no-store"}),
-      fetch(ENDPOINT + '?city=' + encodeURIComponent(CITY_KEY), {cache:"no-store"})
-    ]);
+    // Single combined request: one Apps Script execution, one sheet-open,
+    // instead of the previous two parallel calls — cuts round-trip/spin-up
+    // overhead roughly in half on every load.
+    const res = await fetchWithRetry(ENDPOINT + '?action=city_detail&city=' + encodeURIComponent(CITY_KEY), {cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP " + res.status);
 
-    if(!summaryRes.ok) throw new Error("Summary HTTP " + summaryRes.status);
-    if(!pinRes.ok) throw new Error("Pincode HTTP " + pinRes.status);
+    const json = await res.json();
+    if(!json.success) throw new Error(json.error || "Unknown error from script");
 
-    const summaryJson = await summaryRes.json();
-    const pinJson = await pinRes.json();
-
-    if(!summaryJson.success) throw new Error(summaryJson.error || "Unknown error from script");
-    if(!pinJson.success) throw new Error(pinJson.error || "Unknown error from script");
-
-    const hist = (summaryJson.history && summaryJson.history[CITY_KEY]) || null;
+    const hist = json.city_summary || null;
     if(!hist || !hist.may){
       throw new Error("City \"" + CITY + "\" was not found in May's data.");
     }
@@ -309,7 +320,7 @@ async function loadAll(){
       };
     }
 
-    rawData = (pinJson.pincodes || []).map(p => ({
+    rawData = (json.pincodes || []).map(p => ({
       customer_pincode: String(p.customer_pincode || ''),
       total_gmv: Number(p.total_gmv) || 0,
       loss: Number(p.loss) || 0,
@@ -321,7 +332,7 @@ async function loadAll(){
       }
     }));
 
-    setStatus('live', 'Live · updated ' + new Date(summaryJson.timestamp).toLocaleString());
+    setStatus('live', 'Live · updated ' + new Date(json.timestamp).toLocaleString());
     document.getElementById('footerNote').textContent = 'Source: Apps Script endpoint · ' + rawData.length + ' pincodes loaded for ' + hist.customer_city;
 
     renderTiles();
