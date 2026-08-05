@@ -35,6 +35,7 @@
   .dot{width:7px;height:7px;border-radius:50%;background:#9aa39d;}
   .dot.live{background:var(--accent);}
   .dot.err{background:var(--bad);}
+  .dot.cached{background:#4a7ba6;}
   .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 12px;border-radius:6px;font-family:var(--sans);font-size:12.5px;cursor:pointer;text-decoration:none;display:inline-block;}
   .btn:hover{border-color:var(--accent);color:var(--accent);}
 
@@ -247,6 +248,43 @@ async function fetchWithRetry(url, options, retries = 2, delayMs = 700) {
   }
 }
 
+// ---- Local cache (localStorage) ----
+// Data changes ~once a month, so we render instantly from what's saved
+// locally and only hit the live endpoint on an explicit Refresh click (or
+// the very first-ever visit, when there's nothing saved yet).
+const CITIES_CACHE_KEY = 'gmvDashboard_citiesData'; // shared with index.html — refreshing on either page updates both
+
+function readCache_(key){
+  try{
+    const raw = localStorage.getItem(key);
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    if(!parsed || !parsed.data) return null;
+    return parsed;
+  }catch(e){
+    return null;
+  }
+}
+
+function writeCache_(key, json){
+  try{
+    localStorage.setItem(key, JSON.stringify({ fetchedAt: Date.now(), data: json }));
+  }catch(e){
+    // localStorage can fail (private/incognito mode, storage full) — non-fatal,
+    // the dashboard still works, it just won't persist between visits.
+  }
+}
+
+function formatRelativeTime_(ms){
+  const diffMin = Math.round((Date.now() - ms) / 60000);
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return diffMin + ' min ago';
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return diffHr + ' hr' + (diffHr === 1 ? '' : 's') + ' ago';
+  const diffDay = Math.round(diffHr / 24);
+  return diffDay + ' day' + (diffDay === 1 ? '' : 's') + ' ago';
+}
+
 let rawData = [];
 let historyData = {}; // { CITY_KEY: {customer_city, may, april, march} } — all cities, all 3 months
 let dataAsOf = null;
@@ -276,7 +314,7 @@ function pctTier(pct){
 function setStatus(state, text){
   const dot = document.getElementById('statusDot');
   const t = document.getElementById('statusText');
-  dot.className = 'dot' + (state === 'live' ? ' live' : state === 'err' ? ' err' : '');
+  dot.className = 'dot' + (state === 'live' ? ' live' : state === 'err' ? ' err' : state === 'cached' ? ' cached' : '');
   t.textContent = text;
 }
 
@@ -286,6 +324,21 @@ function openCity(cityName){
   window.location.href = 'city.html?city=' + encodeURIComponent(cityName);
 }
 
+function applyCitiesJson(json, statusFn){
+  rawData = json.data.map(d => ({
+    customer_city: d.customer_city,
+    total_gmv: Number(d.total_gmv) || 0,
+    loss: Number(d.loss) || 0,
+    loss_gmv_percent: (typeof d.loss_gmv_percent === 'number') ? d.loss_gmv_percent : null
+  }));
+  historyData = json.history || {}; // reused for the pan-India trend chart, no extra fetch needed
+  dataAsOf = (json.summary && json.summary.data_date) ? json.summary.data_date : null;
+  document.getElementById('footerNote').textContent = 'Source: Apps Script endpoint · ' + rawData.length + ' cities loaded';
+  applyFilters();
+}
+
+// Always hits the live endpoint. Called by the Refresh button, and
+// automatically on a first-ever visit when there's nothing cached yet.
 async function loadData(){
   setStatus('loading', 'Fetching latest data…');
   document.getElementById('errorSlot').innerHTML = '';
@@ -295,23 +348,27 @@ async function loadData(){
     const json = await res.json();
     if(!json.success) throw new Error(json.error || "Unknown error from script");
 
-    rawData = json.data.map(d => ({
-      customer_city: d.customer_city,
-      total_gmv: Number(d.total_gmv) || 0,
-      loss: Number(d.loss) || 0,
-      loss_gmv_percent: (typeof d.loss_gmv_percent === 'number') ? d.loss_gmv_percent : null
-    }));
-    historyData = json.history || {}; // reused for the pan-India trend chart, no extra fetch needed
-
+    writeCache_(CITIES_CACHE_KEY, json);
+    applyCitiesJson(json);
     setStatus('live', 'Live · updated ' + new Date(json.timestamp).toLocaleString());
-    dataAsOf = (json.summary && json.summary.data_date) ? json.summary.data_date : null;
-    document.getElementById('footerNote').textContent = 'Source: Apps Script endpoint · ' + rawData.length + ' cities loaded';
-    applyFilters();
   }catch(err){
     setStatus('err', 'Could not load live data');
     document.getElementById('errorSlot').innerHTML =
       '<div class="errbox"><strong>Couldn\'t reach the sheet.</strong> This usually means the deployment\'s access isn\'t set to "Anyone," or the link is domain-restricted so it won\'t load for people outside your org viewing this page. '
       + 'In Apps Script → Deploy → Manage deployments, confirm "Who has access" is set to Anyone. Details: <code>' + (err.message || err) + '</code></div>';
+  }
+}
+
+// On page open: render instantly from whatever's saved locally — no network
+// call, no loading time. Only falls back to a live fetch if nothing has ever
+// been saved on this browser yet (e.g. never refreshed on this or the home page).
+function init(){
+  const cached = readCache_(CITIES_CACHE_KEY);
+  if (cached) {
+    applyCitiesJson(cached.data);
+    setStatus('cached', '📦 Showing saved data from ' + formatRelativeTime_(cached.fetchedAt) + ' — click Refresh for the latest');
+  } else {
+    loadData();
   }
 }
 
@@ -555,7 +612,7 @@ function downloadExcel(){
 }
 
 document.querySelector('.sortbtn[data-key="loss_gmv_percent"]').classList.add('active');
-loadData();
+init();
 </script>
 </body>
 </html>
