@@ -343,8 +343,16 @@ function applyCitiesJson(json, statusFn){
 async function loadData(){
   setStatus('loading', 'Fetching latest data…');
   document.getElementById('errorSlot').innerHTML = '';
+
+  // Fire both requests at the same time instead of one after another — this
+  // roughly halves the time before pincode data is ready, shrinking the
+  // window where clicking a city right after the page loads would still
+  // fall back to a live per-city fetch instead of using the prefetch.
+  const citiesPromise = fetchWithRetry(ENDPOINT, {cache:"no-store"});
+  const pinPromise = fetchWithRetry(ENDPOINT + '?action=all_pincodes', {cache:"no-store"});
+
   try{
-    const res = await fetchWithRetry(ENDPOINT, {cache:"no-store"});
+    const res = await citiesPromise;
     if(!res.ok) throw new Error("HTTP " + res.status);
     const json = await res.json();
     if(!json.success) throw new Error(json.error || "Unknown error from script");
@@ -366,7 +374,7 @@ async function loadData(){
   // or the data is too big for localStorage, city.html just falls back to
   // fetching that one city live, same as before.
   try {
-    const pinRes = await fetchWithRetry(ENDPOINT + '?action=all_pincodes', {cache:"no-store"});
+    const pinRes = await pinPromise;
     if (pinRes.ok) {
       const pinJson = await pinRes.json();
       if (pinJson.success) writeCache_(PINCODES_CACHE_KEY, pinJson);
