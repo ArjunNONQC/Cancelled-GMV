@@ -253,6 +253,7 @@ async function fetchWithRetry(url, options, retries = 2, delayMs = 700) {
 // locally and only hit the live endpoint on an explicit Refresh click (or
 // the very first-ever visit, when there's nothing saved yet).
 const CITIES_CACHE_KEY = 'gmvDashboard_citiesData'; // shared with index.html — refreshing on either page updates both
+const PINCODES_CACHE_KEY = 'gmvDashboard_allPincodesData'; // shared with index.html + city.html — prefetches every city's pincodes so city.html never needs its own live fetch
 
 function readCache_(key){
   try{
@@ -356,7 +357,21 @@ async function loadData(){
     document.getElementById('errorSlot').innerHTML =
       '<div class="errbox"><strong>Couldn\'t reach the sheet.</strong> This usually means the deployment\'s access isn\'t set to "Anyone," or the link is domain-restricted so it won\'t load for people outside your org viewing this page. '
       + 'In Apps Script → Deploy → Manage deployments, confirm "Who has access" is set to Anyone. Details: <code>' + (err.message || err) + '</code></div>';
+    return; // main city data failed — don't attempt the pincode prefetch below
   }
+
+  // Best-effort prefetch: warms every city's pincode data in one shot, so
+  // clicking into ANY city afterward — even the very first time — opens
+  // instantly with zero network calls. Silent/non-blocking: if this fails
+  // or the data is too big for localStorage, city.html just falls back to
+  // fetching that one city live, same as before.
+  try {
+    const pinRes = await fetchWithRetry(ENDPOINT + '?action=all_pincodes', {cache:"no-store"});
+    if (pinRes.ok) {
+      const pinJson = await pinRes.json();
+      if (pinJson.success) writeCache_(PINCODES_CACHE_KEY, pinJson);
+    }
+  } catch(e) { /* non-fatal */ }
 }
 
 // On page open: render instantly from whatever's saved locally — no network
