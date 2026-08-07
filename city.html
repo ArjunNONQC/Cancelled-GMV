@@ -248,11 +248,15 @@ const params = new URLSearchParams(window.location.search);
 const CITY = (params.get('city') || '').trim();
 const CITY_KEY = CITY.toUpperCase();
 
-// ---- Local cache (localStorage), scoped per city ----
-// Data changes ~once a month, so we render instantly from what's saved
-// locally for this city and only hit the live endpoint on an explicit
-// Refresh click (or the first time this city is ever opened on this browser).
-const CACHE_KEY = 'gmvDashboard_cityDetail_' + CITY_KEY;
+// ---- Local cache (localStorage) ----
+// Best case: this city's summary + pincodes were already prefetched when
+// index.html/all-cities.html loaded (shared keys below) — renders instantly
+// with zero network calls, even on this city's very first visit. Falls back
+// to this city's own per-city cache, and only as a last resort does a live
+// fetch for just this one city.
+const CITIES_CACHE_KEY = 'gmvDashboard_citiesData';         // shared with index.html/all-cities.html
+const PINCODES_CACHE_KEY = 'gmvDashboard_allPincodesData';  // shared with index.html/all-cities.html
+const CACHE_KEY = 'gmvDashboard_cityDetail_' + CITY_KEY;    // this city's own fallback cache
 
 function readCache_(key){
   try{
@@ -331,15 +335,17 @@ function normMonth_(m){
   };
 }
 
-function applyDetailJson(json){
-  const hist = json.city_summary || null;
+// Renders from already-shaped { hist, pincodes } data — used by all three
+// paths (shared prefetch cache, this city's own cache, and a live fetch)
+// so there's one render path regardless of where the data came from.
+function applyCityData_(hist, pincodesRaw){
   if(!hist || !hist.may){
     throw new Error("City \"" + CITY + "\" was not found in May's data.");
   }
   cityHistory = hist;
   document.getElementById('cityTitle').textContent = hist.customer_city;
 
-  rawData = (json.pincodes || []).map(p => ({
+  rawData = (pincodesRaw || []).map(p => ({
     customer_pincode: String(p.customer_pincode || ''),
     total_gmv: Number(p.total_gmv) || 0,
     loss: Number(p.loss) || 0,
@@ -358,8 +364,12 @@ function applyDetailJson(json){
   applyFilters();
 }
 
-// Always hits the live endpoint. Called by the Refresh button, and
-// automatically the first time this city is ever opened on this browser.
+function applyDetailJson(json){
+  applyCityData_(json.city_summary || null, json.pincodes || []);
+}
+
+// Always hits the live endpoint. Called by the Refresh button, and as a
+// last-resort fallback when this city has no data cached anywhere yet.
 async function loadAll(){
   if(!CITY_KEY){
     showError('No city was specified in the URL. Go back and click a city from the main dashboard.');
@@ -388,26 +398,43 @@ async function loadAll(){
   }
 }
 
-// On page open: render instantly from whatever's saved locally for this
-// city — no network call, no loading time. Falls back to a live fetch only
-// if this city has never been opened on this browser before.
+// On page open, try three sources in order, cheapest/fastest first:
+//   1. Data already prefetched by index.html/all-cities.html for EVERY city
+//      — if present, this renders instantly with zero network calls, even
+//      the very first time this city has ever been opened.
+//   2. This city's own cache from a past direct visit.
+//   3. A live fetch — only if neither of the above has anything.
 function init(){
   if(!CITY_KEY){
     showError('No city was specified in the URL. Go back and click a city from the main dashboard.');
     setStatus('err', 'No city specified');
     return;
   }
+
+  const citiesCache = readCache_(CITIES_CACHE_KEY);
+  const pinCache = readCache_(PINCODES_CACHE_KEY);
+  const hist = citiesCache && citiesCache.data && citiesCache.data.history && citiesCache.data.history[CITY_KEY];
+  const cityPincodes = pinCache && pinCache.data && pinCache.data.pincodes_by_city && pinCache.data.pincodes_by_city[CITY_KEY];
+
+  if (hist && hist.may && cityPincodes) {
+    try{
+      applyCityData_(hist, cityPincodes);
+      const oldest = Math.min(citiesCache.fetchedAt, pinCache.fetchedAt);
+      setStatus('cached', '📦 Showing saved data from ' + formatRelativeTime_(oldest) + ' — click Refresh for the latest');
+      return;
+    }catch(err){ /* fall through */ }
+  }
+
   const cached = readCache_(CACHE_KEY);
   if (cached) {
     try{
       applyDetailJson(cached.data);
       setStatus('cached', '📦 Showing saved data from ' + formatRelativeTime_(cached.fetchedAt) + ' — click Refresh for the latest');
-    }catch(err){
-      loadAll(); // cached entry was somehow invalid (e.g. city renamed) — fall back to a live fetch
-    }
-  } else {
-    loadAll();
+      return;
+    }catch(err){ /* fall through to live fetch */ }
   }
+
+  loadAll();
 }
 
 function renderTiles(){
