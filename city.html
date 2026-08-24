@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>City Detail — Cancelled GMV %</title>
+<title>City Detail — GMV Loss</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -26,7 +26,7 @@
   body{padding:28px 20px 60px;}
   .wrap{max-width:1260px;margin:0 auto;}
 
-  header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:22px;border-bottom:1px solid var(--line);padding-bottom:18px;}
+  header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:18px;}
   .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 6px;}
   .backlink{font-family:var(--mono);font-size:12px;color:var(--ink-soft);text-decoration:none;display:inline-block;margin-bottom:10px;}
   .backlink:hover{color:var(--accent);}
@@ -39,6 +39,16 @@
   .dot.cached{background:#4a7ba6;}
   .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 12px;border-radius:6px;font-family:var(--sans);font-size:12.5px;cursor:pointer;}
   .btn:hover{border-color:var(--accent);color:var(--accent);}
+
+  /* Type toggle (3PL / Inhouse) */
+  .typetoggle{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:16px;background:var(--panel);}
+  .typetoggle button{border:none;background:var(--panel);padding:10px 20px;font-size:13.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:var(--sans);}
+  .typetoggle button.active{background:var(--ink);color:#fff;}
+
+  /* Sub-view toggle (Pincodes / Riders — Inhouse only) */
+  .subviewtoggle{display:none;border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-bottom:16px;width:fit-content;}
+  .subviewtoggle button{border:none;background:var(--panel);padding:8px 16px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;font-family:var(--sans);}
+  .subviewtoggle button.active{background:var(--accent);color:#fff;}
 
   .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:20px;}
   .tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;}
@@ -128,7 +138,7 @@
       <a class="backlink" href="all-cities.html">← Back to all cities</a>
       <p class="eyebrow">Ops · Cancellations · City Detail</p>
       <h1 id="cityTitle">—</h1>
-      <p class="subtitle">Current month (May) summary, 3‑month trend, and pincode‑level breakdown</p>
+      <p class="subtitle" id="pageSubtitle">Current month (May) summary, 3‑month trend, and pincode‑level breakdown</p>
     </div>
     <div class="status">
       <span class="dot" id="statusDot"></span>
@@ -137,6 +147,16 @@
       <button class="btn" onclick="downloadExcel()">⬇ Download Excel</button>
     </div>
   </header>
+
+  <div class="typetoggle" id="typeToggle">
+    <button id="type3pl" onclick="setType('3pl')">🚚 3PL</button>
+    <button id="typeInhouse" onclick="setType('inhouse')">🏠 Inhouse</button>
+  </div>
+
+  <div class="subviewtoggle" id="subViewToggle">
+    <button id="subViewPincodes" class="active" onclick="setSubView('pincodes')">📍 Pincodes</button>
+    <button id="subViewRiders" onclick="setSubView('riders')">🏍️ Riders</button>
+  </div>
 
   <div id="errorSlot"></div>
 
@@ -148,77 +168,103 @@
     <div id="trendChart"></div>
   </div>
 
-  <div class="filterpanel">
-    <div class="filterpanel-head">
-      <h3>Pincode range filters (May)</h3>
-      <button class="clearbtn" onclick="clearFilters()">Clear all filters</button>
+  <!-- ===== Pincodes section (existing view, unchanged) ===== -->
+  <div id="pincodeSection">
+    <div class="filterpanel">
+      <div class="filterpanel-head">
+        <h3>Pincode range filters (May)</h3>
+        <button class="clearbtn" onclick="clearFilters()">Clear all filters</button>
+      </div>
+      <div class="filtergrid">
+        <div class="filtergroup">
+          <label>Total GMV (₹)</label>
+          <div class="filterrange">
+            <input type="number" id="gmvMin" placeholder="Min" oninput="applyFilters()">
+            <span>–</span>
+            <input type="number" id="gmvMax" placeholder="Max" oninput="applyFilters()">
+          </div>
+        </div>
+        <div class="filtergroup">
+          <label>Loss (₹, absolute)</label>
+          <div class="filterrange">
+            <input type="number" id="lossMin" placeholder="Min" oninput="applyFilters()">
+            <span>–</span>
+            <input type="number" id="lossMax" placeholder="Max" oninput="applyFilters()">
+          </div>
+        </div>
+        <div class="filtergroup">
+          <label>Loss GMV % (e.g. 50 = 50%)</label>
+          <div class="filterrange">
+            <input type="number" id="pctMin" placeholder="Min" oninput="applyFilters()">
+            <span>–</span>
+            <input type="number" id="pctMax" placeholder="Max" oninput="applyFilters()">
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="filtergrid">
-      <div class="filtergroup">
-        <label>Total GMV (₹)</label>
-        <div class="filterrange">
-          <input type="number" id="gmvMin" placeholder="Min" oninput="applyFilters()">
-          <span>–</span>
-          <input type="number" id="gmvMax" placeholder="Max" oninput="applyFilters()">
-        </div>
+
+    <div class="controls">
+      <input id="search" type="text" placeholder="Search a pincode…" oninput="applyFilters()">
+      <div class="sortbar">
+        <button class="sortbtn" data-key="loss_gmv_percent" onclick="setSort('loss_gmv_percent')">Loss % ↓</button>
+        <button class="sortbtn" data-key="total_gmv" onclick="setSort('total_gmv')">GMV</button>
+        <button class="sortbtn" data-key="loss" onclick="setSort('loss')">Loss ₹</button>
+        <button class="sortbtn" data-key="customer_pincode" onclick="setSort('customer_pincode')">Pincode</button>
       </div>
-      <div class="filtergroup">
-        <label>Loss (₹, absolute)</label>
-        <div class="filterrange">
-          <input type="number" id="lossMin" placeholder="Min" oninput="applyFilters()">
-          <span>–</span>
-          <input type="number" id="lossMax" placeholder="Max" oninput="applyFilters()">
-        </div>
+      <div class="viewtoggle">
+        <button id="viewListBtn" class="active" onclick="setView('list')">☰ List</button>
+        <button id="viewGridBtn" onclick="setView('grid')">▦ Grid</button>
       </div>
-      <div class="filtergroup">
-        <label>Loss GMV % (e.g. 50 = 50%)</label>
-        <div class="filterrange">
-          <input type="number" id="pctMin" placeholder="Min" oninput="applyFilters()">
-          <span>–</span>
-          <input type="number" id="pctMax" placeholder="Max" oninput="applyFilters()">
-        </div>
+      <span class="count" id="rowCount"></span>
+    </div>
+
+    <div class="tablewrap" id="listWrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Pincode</th>
+            <th style="text-align:right">Total GMV</th>
+            <th style="text-align:right">Loss (₹)</th>
+            <th style="text-align:right">Loss GMV %</th>
+            <th style="text-align:center">3‑Mo Trend</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty" id="emptyStateList" style="display:none;">No pincodes match your filters.</div>
+    </div>
+
+    <div class="gridwrap" id="gridWrap">
+      <div class="cubegrid" id="cubegrid"></div>
+      <div class="empty" id="emptyStateGrid" style="display:none;">No pincodes match your filters.</div>
+      <div class="legend">
+        <span><i style="background:var(--accent)"></i> Loss % below 2.5% — healthy</span>
+        <span><i style="background:var(--warn)"></i> 2.5%–6% — watch</span>
+        <span><i style="background:var(--bad)"></i> Above 6% — critical</span>
       </div>
     </div>
   </div>
 
-  <div class="controls">
-    <input id="search" type="text" placeholder="Search a pincode…" oninput="applyFilters()">
-    <div class="sortbar">
-      <button class="sortbtn" data-key="loss_gmv_percent" onclick="setSort('loss_gmv_percent')">Loss % ↓</button>
-      <button class="sortbtn" data-key="total_gmv" onclick="setSort('total_gmv')">GMV</button>
-      <button class="sortbtn" data-key="loss" onclick="setSort('loss')">Loss ₹</button>
-      <button class="sortbtn" data-key="customer_pincode" onclick="setSort('customer_pincode')">Pincode</button>
+  <!-- ===== Riders section (new, Inhouse only) ===== -->
+  <div id="riderSection" style="display:none;">
+    <div class="controls">
+      <span style="font-size:13px;color:var(--ink-soft);">Riders operating in this city, current month — worst loss first</span>
+      <span class="count" id="riderRowCount" style="margin-left:auto;"></span>
     </div>
-    <div class="viewtoggle">
-      <button id="viewListBtn" class="active" onclick="setView('list')">☰ List</button>
-      <button id="viewGridBtn" onclick="setView('grid')">▦ Grid</button>
-    </div>
-    <span class="count" id="rowCount"></span>
-  </div>
-
-  <div class="tablewrap" id="listWrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Pincode</th>
-          <th style="text-align:right">Total GMV</th>
-          <th style="text-align:right">Loss (₹)</th>
-          <th style="text-align:right">Loss GMV %</th>
-          <th style="text-align:center">3‑Mo Trend</th>
-        </tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
-    <div class="empty" id="emptyStateList" style="display:none;">No pincodes match your filters.</div>
-  </div>
-
-  <div class="gridwrap" id="gridWrap">
-    <div class="cubegrid" id="cubegrid"></div>
-    <div class="empty" id="emptyStateGrid" style="display:none;">No pincodes match your filters.</div>
-    <div class="legend">
-      <span><i style="background:var(--accent)"></i> Loss % below 2.5% — healthy</span>
-      <span><i style="background:var(--warn)"></i> 2.5%–6% — watch</span>
-      <span><i style="background:var(--bad)"></i> Above 6% — critical</span>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Rider</th>
+            <th style="text-align:right">Orders</th>
+            <th style="text-align:right">Total GMV</th>
+            <th style="text-align:right">Loss (₹)</th>
+            <th style="text-align:right">Loss GMV %</th>
+          </tr>
+        </thead>
+        <tbody id="riderTbody"></tbody>
+      </table>
+      <div class="empty" id="emptyStateRiders" style="display:none;">No rider data for this city.</div>
     </div>
   </div>
 
@@ -249,14 +295,19 @@ const CITY = (params.get('city') || '').trim();
 const CITY_KEY = CITY.toUpperCase();
 
 // ---- Local cache (localStorage) ----
-// Best case: this city's summary + pincodes were already prefetched when
-// index.html/all-cities.html loaded (shared keys below) — renders instantly
-// with zero network calls, even on this city's very first visit. Falls back
-// to this city's own per-city cache, and only as a last resort does a live
-// fetch for just this one city.
-const CITIES_CACHE_KEY = 'gmvDashboard_citiesData';         // shared with index.html/all-cities.html
-const PINCODES_CACHE_KEY = 'gmvDashboard_allPincodesData';  // shared with index.html/all-cities.html
-const CACHE_KEY = 'gmvDashboard_cityDetail_' + CITY_KEY;    // this city's own fallback cache
+// Best case: this city's summary + pincodes (+ riders, for Inhouse) were
+// already prefetched when index.html/all-cities.html loaded — renders
+// instantly with zero network calls, even on this city's very first visit.
+// Falls back to this city's own per-type cache, and only as a last resort
+// does a live fetch for just this one city.
+const CITIES_CACHE_KEY = 'gmvDashboard_citiesData';
+const PINCODES_CACHE_KEY = 'gmvDashboard_allPincodesData';
+const INHOUSE_CITIES_CACHE_KEY = 'gmvDashboard_inhouseCitiesData';
+const INHOUSE_PINCODES_CACHE_KEY = 'gmvDashboard_inhouseAllPincodesData';
+const INHOUSE_RIDERS_CACHE_KEY = 'gmvDashboard_inhouseAllRidersData';
+const CACHE_KEY_3PL = 'gmvDashboard_cityDetail_' + CITY_KEY;
+const CACHE_KEY_INHOUSE = 'gmvDashboard_inhouseCityDetail_' + CITY_KEY;
+const TYPE_KEY = 'gmvDashboard_activeType';
 
 function readCache_(key){
   try{
@@ -289,7 +340,15 @@ function formatRelativeTime_(ms){
   return diffDay + ' day' + (diffDay === 1 ? '' : 's') + ' ago';
 }
 
+// Initial type: URL param (set when arriving from a toggle-aware click) wins,
+// then the browser's remembered choice, then default to 3PL.
+let activeType = (params.get('type') === 'inhouse' || params.get('type') === '3pl')
+  ? params.get('type')
+  : (localStorage.getItem(TYPE_KEY) || '3pl');
+let activeSubView = 'pincodes'; // 'pincodes' | 'riders' — riders only applies in Inhouse mode
+
 let rawData = [];       // pincode rows for this city, May only
+let riderData = [];     // rider rows for this city, May only (Inhouse only)
 let cityHistory = null; // { may, april, march } loss%/gmv/loss per month for this city
 let sortKey = "loss_gmv_percent";
 let sortDir = "desc";
@@ -335,12 +394,32 @@ function normMonth_(m){
   };
 }
 
-// Renders from already-shaped { hist, pincodes } data — used by all three
-// paths (shared prefetch cache, this city's own cache, and a live fetch)
-// so there's one render path regardless of where the data came from.
-function applyCityData_(hist, pincodesRaw){
+function updateTypeUI_(){
+  document.getElementById('type3pl').classList.toggle('active', activeType === '3pl');
+  document.getElementById('typeInhouse').classList.toggle('active', activeType === 'inhouse');
+  document.getElementById('subViewToggle').style.display = activeType === 'inhouse' ? 'inline-flex' : 'none';
+  document.getElementById('pageSubtitle').textContent = activeType === 'inhouse'
+    ? 'Current month (May) summary, 3‑month trend, pincode breakdown, and rider-level loss for this city'
+    : 'Current month (May) summary, 3‑month trend, and pincode‑level breakdown';
+  if (activeType === '3pl' && activeSubView === 'riders') {
+    setSubView('pincodes'); // riders view doesn't apply to 3PL — force back
+  }
+}
+
+function setSubView(view){
+  activeSubView = view;
+  document.getElementById('subViewPincodes').classList.toggle('active', view === 'pincodes');
+  document.getElementById('subViewRiders').classList.toggle('active', view === 'riders');
+  document.getElementById('pincodeSection').style.display = view === 'pincodes' ? 'block' : 'none';
+  document.getElementById('riderSection').style.display = view === 'riders' ? 'block' : 'none';
+}
+
+// Renders from already-shaped data — used by all three paths (shared
+// prefetch cache, this city's own cache, and a live fetch) so there's one
+// render path regardless of where the data came from.
+function applyCityData_(hist, pincodesRaw, ridersRaw){
   if(!hist || !hist.may){
-    throw new Error("City \"" + CITY + "\" was not found in May's data.");
+    throw new Error("City \"" + CITY + "\" was not found in " + (activeType === 'inhouse' ? 'Inhouse' : '3PL') + " data for May.");
   }
   cityHistory = hist;
   document.getElementById('cityTitle').textContent = hist.customer_city;
@@ -357,19 +436,31 @@ function applyCityData_(hist, pincodesRaw){
     }
   }));
 
-  document.getElementById('footerNote').textContent = 'Source: Apps Script endpoint · ' + rawData.length + ' pincodes loaded for ' + hist.customer_city;
+  riderData = (ridersRaw || []).map(r => ({
+    rider_details: String(r.rider_details || 'Unassigned'),
+    total_gmv: Number(r.total_gmv) || 0,
+    loss: Number(r.loss) || 0,
+    loss_gmv_percent: (typeof r.loss_gmv_percent === 'number') ? r.loss_gmv_percent : null,
+    order_count: Number(r.order_count) || 0
+  }));
+
+  document.getElementById('footerNote').textContent = 'Source: Apps Script endpoint · ' + rawData.length + ' pincodes'
+    + (activeType === 'inhouse' ? ' · ' + riderData.length + ' riders' : '') + ' loaded for ' + hist.customer_city;
 
   renderTiles();
   renderTrend();
   applyFilters();
+  renderRiders();
 }
 
 function applyDetailJson(json){
-  applyCityData_(json.city_summary || null, json.pincodes || []);
+  applyCityData_(json.city_summary || null, json.pincodes || [], json.riders || []);
 }
 
-// Always hits the live endpoint. Called by the Refresh button, and as a
-// last-resort fallback when this city has no data cached anywhere yet.
+// Refreshes THIS city for BOTH types in one go (two Apps Script calls), so
+// toggling 3PL/Inhouse afterward stays instant without a second live fetch.
+// Called by the Refresh button, and as a last-resort fallback when this city
+// has no data cached anywhere yet for the active type.
 async function loadAll(){
   if(!CITY_KEY){
     showError('No city was specified in the URL. Go back and click a city from the main dashboard.');
@@ -380,52 +471,85 @@ async function loadAll(){
   setStatus('loading', 'Fetching city data…');
   document.getElementById('errorSlot').innerHTML = '';
 
-  try{
-    // Single combined request: one Apps Script execution, one sheet-open,
-    // instead of two parallel calls — cuts round-trip/spin-up overhead in half.
-    const res = await fetchWithRetry(ENDPOINT + '?action=city_detail&city=' + encodeURIComponent(CITY_KEY), {cache:"no-store"});
-    if(!res.ok) throw new Error("HTTP " + res.status);
+  const threePlPromise = fetchWithRetry(ENDPOINT + '?action=city_detail&city=' + encodeURIComponent(CITY_KEY), {cache:"no-store"});
+  const inhousePromise = fetchWithRetry(ENDPOINT + '?action=inhouse_city_detail&city=' + encodeURIComponent(CITY_KEY), {cache:"no-store"});
 
+  let applied = false;
+
+  try{
+    const res = await threePlPromise;
+    if(!res.ok) throw new Error("HTTP " + res.status);
     const json = await res.json();
     if(!json.success) throw new Error(json.error || "Unknown error from script");
-
-    writeCache_(CACHE_KEY, json);
-    applyDetailJson(json);
-    setStatus('live', 'Live · updated ' + new Date(json.timestamp).toLocaleString());
+    writeCache_(CACHE_KEY_3PL, json);
+    if (activeType === '3pl') { applyDetailJson(json); applied = true; }
   }catch(err){
-    setStatus('err', 'Could not load city data');
-    showError('Details: <code>' + (err.message || err) + '</code>');
+    if (activeType === '3pl') {
+      setStatus('err', 'Could not load city data');
+      showError('Details: <code>' + (err.message || err) + '</code>');
+    }
+  }
+
+  try{
+    const res = await inhousePromise;
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const json = await res.json();
+    if(!json.success) throw new Error(json.error || "Unknown error from script");
+    writeCache_(CACHE_KEY_INHOUSE, json);
+    if (activeType === 'inhouse') { applyDetailJson(json); applied = true; }
+  }catch(err){
+    if (activeType === 'inhouse') {
+      setStatus('err', 'Could not load city data');
+      showError('Details: <code>' + (err.message || err) + '</code> — this city may not have Inhouse data yet.');
+    }
+  }
+
+  if (applied) {
+    setStatus('live', 'Live · updated ' + new Date().toLocaleString());
   }
 }
 
-// On page open, try three sources in order, cheapest/fastest first:
-//   1. Data already prefetched by index.html/all-cities.html for EVERY city
-//      — if present, this renders instantly with zero network calls, even
-//      the very first time this city has ever been opened.
-//   2. This city's own cache from a past direct visit.
-//   3. A live fetch — only if neither of the above has anything.
-function init(){
+// Tries, in order: (1) data prefetched for every city by index.html/all-cities.html,
+// (2) this city's own per-type cache from a past visit, (3) a live fetch.
+function loadFromBestSource_(){
   if(!CITY_KEY){
     showError('No city was specified in the URL. Go back and click a city from the main dashboard.');
     setStatus('err', 'No city specified');
     return;
   }
 
-  const citiesCache = readCache_(CITIES_CACHE_KEY);
-  const pinCache = readCache_(PINCODES_CACHE_KEY);
+  const citiesCacheKey = activeType === 'inhouse' ? INHOUSE_CITIES_CACHE_KEY : CITIES_CACHE_KEY;
+  const pinCacheKey = activeType === 'inhouse' ? INHOUSE_PINCODES_CACHE_KEY : PINCODES_CACHE_KEY;
+  const perCityCacheKey = activeType === 'inhouse' ? CACHE_KEY_INHOUSE : CACHE_KEY_3PL;
+
+  const citiesCache = readCache_(citiesCacheKey);
+  const pinCache = readCache_(pinCacheKey);
   const hist = citiesCache && citiesCache.data && citiesCache.data.history && citiesCache.data.history[CITY_KEY];
   const cityPincodes = pinCache && pinCache.data && pinCache.data.pincodes_by_city && pinCache.data.pincodes_by_city[CITY_KEY];
 
-  if (hist && hist.may && cityPincodes) {
-    try{
-      applyCityData_(hist, cityPincodes);
-      const oldest = Math.min(citiesCache.fetchedAt, pinCache.fetchedAt);
-      setStatus('cached', '📦 Showing saved data from ' + formatRelativeTime_(oldest) + ' — click Refresh for the latest');
-      return;
-    }catch(err){ /* fall through */ }
+  if (activeType === 'inhouse') {
+    const riderCache = readCache_(INHOUSE_RIDERS_CACHE_KEY);
+    const cityRiders = riderCache && riderCache.data && riderCache.data.riders_by_city && riderCache.data.riders_by_city[CITY_KEY];
+    if (hist && hist.may && cityPincodes && cityRiders) {
+      try{
+        applyCityData_(hist, cityPincodes, cityRiders);
+        const oldest = Math.min(citiesCache.fetchedAt, pinCache.fetchedAt, riderCache.fetchedAt);
+        setStatus('cached', '📦 Showing saved data from ' + formatRelativeTime_(oldest) + ' — click Refresh for the latest');
+        return;
+      }catch(err){ /* fall through */ }
+    }
+  } else {
+    if (hist && hist.may && cityPincodes) {
+      try{
+        applyCityData_(hist, cityPincodes, []);
+        const oldest = Math.min(citiesCache.fetchedAt, pinCache.fetchedAt);
+        setStatus('cached', '📦 Showing saved data from ' + formatRelativeTime_(oldest) + ' — click Refresh for the latest');
+        return;
+      }catch(err){ /* fall through */ }
+    }
   }
 
-  const cached = readCache_(CACHE_KEY);
+  const cached = readCache_(perCityCacheKey);
   if (cached) {
     try{
       applyDetailJson(cached.data);
@@ -435,6 +559,18 @@ function init(){
   }
 
   loadAll();
+}
+
+function setType(type){
+  activeType = type;
+  try{ localStorage.setItem(TYPE_KEY, type); }catch(e){}
+  updateTypeUI_();
+  loadFromBestSource_();
+}
+
+function init(){
+  updateTypeUI_();
+  loadFromBestSource_();
 }
 
 function renderTiles(){
@@ -465,7 +601,6 @@ function renderTrend(){
   const points = months.map((m,i) => ({x: x(i), y: y(m.pct), ...m}));
   const path = points.map((p,i) => (i===0?'M':'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
 
-  // gridlines (4 horizontal bands)
   let gridLines = '';
   for(let g=0; g<=4; g++){
     const gy = padT + (h - padT - padB) * (g/4);
@@ -649,7 +784,52 @@ function renderGrid(rows){
   }).join('');
 }
 
+// Riders: worst loss first, no filters — a straightforward ranked list.
+function renderRiders(){
+  const tbody = document.getElementById('riderTbody');
+  const empty = document.getElementById('emptyStateRiders');
+  document.getElementById('riderRowCount').textContent = riderData.length + ' rider' + (riderData.length===1?'':'s');
+
+  if (riderData.length === 0){
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  const sorted = [...riderData].sort((a,b) => b.loss - a.loss);
+  tbody.innerHTML = sorted.map(r => {
+    const c = pctTier(r.loss_gmv_percent);
+    return `<tr>
+      <td class="city">${r.rider_details}</td>
+      <td class="num">${r.order_count}</td>
+      <td class="num">${fmtINR(r.total_gmv)}</td>
+      <td class="num">${fmtINR(r.loss)}</td>
+      <td class="num"><span class="pct-pill" style="background:${c.pillBg};color:${c.pillFg}">${fmtPct(r.loss_gmv_percent)}</span></td>
+    </tr>`;
+  }).join('');
+}
+
 function downloadExcel(){
+  if (activeType === 'inhouse' && activeSubView === 'riders') {
+    if (!riderData.length){ alert('No rider rows to export.'); return; }
+    const sheetData = [...riderData].sort((a,b)=>b.loss-a.loss).map(r => ({
+      'Rider': r.rider_details,
+      'Orders': r.order_count,
+      'Total GMV': r.total_gmv,
+      'Loss (₹)': r.loss,
+      'Loss GMV %': (typeof r.loss_gmv_percent === 'number') ? +(r.loss_gmv_percent*100).toFixed(2) : ''
+    }));
+    const ws = XLSX.utils.json_to_sheet(sheetData);
+    ws['!cols'] = [{wch:22},{wch:9},{wch:14},{wch:12},{wch:12}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, (cityHistory ? cityHistory.customer_city : 'City') + ' Riders');
+    const stamp = new Date().toISOString().slice(0,10);
+    const cityForFile = (cityHistory ? cityHistory.customer_city : CITY).toLowerCase().replace(/[^a-z0-9]+/g,'-');
+    XLSX.writeFile(wb, `riders-${cityForFile}-${stamp}.xlsx`);
+    return;
+  }
+
   const rows = window._filteredRows || rawData;
   if(!rows.length){ alert('No rows to export — adjust your filters.'); return; }
   const sheetData = rows.map(r => ({
