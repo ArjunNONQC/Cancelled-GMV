@@ -39,6 +39,11 @@
   .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 12px;border-radius:6px;font-family:var(--sans);font-size:12.5px;cursor:pointer;text-decoration:none;display:inline-block;}
   .btn:hover{border-color:var(--accent);color:var(--accent);}
 
+  /* Type toggle (3PL / Inhouse) */
+  .typetoggle{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:20px;background:var(--panel);}
+  .typetoggle button{border:none;background:var(--panel);padding:10px 20px;font-size:13.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:var(--sans);}
+  .typetoggle button.active{background:var(--ink);color:#fff;}
+
   /* Summary tiles */
   .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px;}
   .tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;}
@@ -141,6 +146,11 @@
       <button class="btn" onclick="downloadExcel()">⬇ Download Excel</button>
     </div>
   </header>
+
+  <div class="typetoggle" id="typeToggle">
+    <button id="type3pl" onclick="setType('3pl')">🚚 3PL</button>
+    <button id="typeInhouse" onclick="setType('inhouse')">🏠 Inhouse</button>
+  </div>
 
   <div id="errorSlot"></div>
 
@@ -254,6 +264,10 @@ async function fetchWithRetry(url, options, retries = 2, delayMs = 700) {
 // the very first-ever visit, when there's nothing saved yet).
 const CITIES_CACHE_KEY = 'gmvDashboard_citiesData'; // shared with index.html — refreshing on either page updates both
 const PINCODES_CACHE_KEY = 'gmvDashboard_allPincodesData'; // shared with index.html + city.html — prefetches every city's pincodes so city.html never needs its own live fetch
+const INHOUSE_CITIES_CACHE_KEY = 'gmvDashboard_inhouseCitiesData';
+const INHOUSE_PINCODES_CACHE_KEY = 'gmvDashboard_inhouseAllPincodesData';
+const INHOUSE_RIDERS_CACHE_KEY = 'gmvDashboard_inhouseAllRidersData';
+const TYPE_KEY = 'gmvDashboard_activeType';
 
 function readCache_(key){
   try{
@@ -292,6 +306,7 @@ let dataAsOf = null;
 let sortKey = "loss_gmv_percent";
 let sortDir = "desc";
 let viewMode = "list";
+let activeType = localStorage.getItem(TYPE_KEY) || '3pl'; // '3pl' | 'inhouse'
 
 function fmtINR(n){
   if (n === null || n === undefined || isNaN(n)) return "—";
@@ -319,10 +334,16 @@ function setStatus(state, text){
   t.textContent = text;
 }
 
-// Opens the detail page for a city. Uses the router's ?city= param so
-// city.html can fetch its own summary/history + pincode breakdown.
+// Opens the detail page for a city. Uses the router's ?city= and ?type=
+// params so city.html can fetch its own summary/history + pincode breakdown
+// for the correct dataset.
 function openCity(cityName){
-  window.location.href = 'city.html?city=' + encodeURIComponent(cityName);
+  window.location.href = 'city.html?city=' + encodeURIComponent(cityName) + '&type=' + activeType;
+}
+
+function updateTypeUI_(){
+  document.getElementById('type3pl').classList.toggle('active', activeType === '3pl');
+  document.getElementById('typeInhouse').classList.toggle('active', activeType === 'inhouse');
 }
 
 function applyCitiesJson(json, statusFn){
@@ -338,55 +359,107 @@ function applyCitiesJson(json, statusFn){
   applyFilters();
 }
 
-// Always hits the live endpoint. Called by the Refresh button, and
-// automatically on a first-ever visit when there's nothing cached yet.
+// Switches which dataset is shown. Renders instantly from that type's cache
+// if present; otherwise does a full live refresh (which warms both types).
+function setType(type){
+  activeType = type;
+  try{ localStorage.setItem(TYPE_KEY, type); }catch(e){}
+  updateTypeUI_();
+
+  const key = type === 'inhouse' ? INHOUSE_CITIES_CACHE_KEY : CITIES_CACHE_KEY;
+  const cached = readCache_(key);
+  if (cached) {
+    applyCitiesJson(cached.data);
+    setStatus('cached', '📦 Showing saved data from ' + formatRelativeTime_(cached.fetchedAt) + ' — click Refresh for the latest');
+  } else {
+    loadData();
+  }
+}
+
+// Always hits the live endpoint — fetches 3PL AND Inhouse together (cities +
+// prefetched pincodes, plus Inhouse riders) so that after any Refresh, both
+// toggle positions and every city in either mode are instant. Called by the
+// Refresh button, and automatically whenever the active type has no cache yet.
 async function loadData(){
   setStatus('loading', 'Fetching latest data…');
   document.getElementById('errorSlot').innerHTML = '';
 
-  // Fire both requests at the same time instead of one after another — this
-  // roughly halves the time before pincode data is ready, shrinking the
-  // window where clicking a city right after the page loads would still
-  // fall back to a live per-city fetch instead of using the prefetch.
-  const citiesPromise = fetchWithRetry(ENDPOINT, {cache:"no-store"});
-  const pinPromise = fetchWithRetry(ENDPOINT + '?action=all_pincodes', {cache:"no-store"});
+  const threePlPromise = fetchWithRetry(ENDPOINT, {cache:"no-store"});
+  const threePlPinPromise = fetchWithRetry(ENDPOINT + '?action=all_pincodes', {cache:"no-store"});
+  const inhouseCitiesPromise = fetchWithRetry(ENDPOINT + '?action=inhouse_cities', {cache:"no-store"});
+  const inhousePinPromise = fetchWithRetry(ENDPOINT + '?action=inhouse_all_pincodes', {cache:"no-store"});
+  const inhouseRidersPromise = fetchWithRetry(ENDPOINT + '?action=inhouse_all_riders', {cache:"no-store"});
+
+  let mainOk = false;
 
   try{
-    const res = await citiesPromise;
+    const res = await threePlPromise;
     if(!res.ok) throw new Error("HTTP " + res.status);
     const json = await res.json();
     if(!json.success) throw new Error(json.error || "Unknown error from script");
-
     writeCache_(CITIES_CACHE_KEY, json);
-    applyCitiesJson(json);
-    setStatus('live', 'Live · updated ' + new Date(json.timestamp).toLocaleString());
+    if (activeType === '3pl') { applyCitiesJson(json); mainOk = true; }
   }catch(err){
-    setStatus('err', 'Could not load live data');
-    document.getElementById('errorSlot').innerHTML =
-      '<div class="errbox"><strong>Couldn\'t reach the sheet.</strong> This usually means the deployment\'s access isn\'t set to "Anyone," or the link is domain-restricted so it won\'t load for people outside your org viewing this page. '
-      + 'In Apps Script → Deploy → Manage deployments, confirm "Who has access" is set to Anyone. Details: <code>' + (err.message || err) + '</code></div>';
-    return; // main city data failed — don't attempt the pincode prefetch below
+    if (activeType === '3pl') {
+      setStatus('err', 'Could not load live data');
+      document.getElementById('errorSlot').innerHTML =
+        '<div class="errbox"><strong>Couldn\'t reach the sheet.</strong> This usually means the deployment\'s access isn\'t set to "Anyone," or the link is domain-restricted so it won\'t load for people outside your org viewing this page. '
+        + 'In Apps Script → Deploy → Manage deployments, confirm "Who has access" is set to Anyone. Details: <code>' + (err.message || err) + '</code></div>';
+    }
   }
 
-  // Best-effort prefetch: warms every city's pincode data in one shot, so
-  // clicking into ANY city afterward — even the very first time — opens
-  // instantly with zero network calls. Silent/non-blocking: if this fails
-  // or the data is too big for localStorage, city.html just falls back to
-  // fetching that one city live, same as before.
+  try{
+    const res = await inhouseCitiesPromise;
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const json = await res.json();
+    if(!json.success) throw new Error(json.error || "Unknown error from script");
+    writeCache_(INHOUSE_CITIES_CACHE_KEY, json);
+    if (activeType === 'inhouse') { applyCitiesJson(json); mainOk = true; }
+  }catch(err){
+    if (activeType === 'inhouse') {
+      setStatus('err', 'Could not load live data');
+      document.getElementById('errorSlot').innerHTML =
+        '<div class="errbox"><strong>Couldn\'t reach the Inhouse tab.</strong> Confirm the "Inhouse GMV %" sheet exists and the deployment is redeployed with the latest Apps Script code. Details: <code>' + (err.message || err) + '</code></div>';
+    }
+  }
+
+  if (mainOk) {
+    setStatus('live', 'Live · updated ' + new Date().toLocaleString());
+  }
+
+  // Best-effort prefetches — silent/non-blocking.
   try {
-    const pinRes = await pinPromise;
+    const pinRes = await threePlPinPromise;
     if (pinRes.ok) {
       const pinJson = await pinRes.json();
       if (pinJson.success) writeCache_(PINCODES_CACHE_KEY, pinJson);
     }
   } catch(e) { /* non-fatal */ }
+
+  try {
+    const pinRes = await inhousePinPromise;
+    if (pinRes.ok) {
+      const pinJson = await pinRes.json();
+      if (pinJson.success) writeCache_(INHOUSE_PINCODES_CACHE_KEY, pinJson);
+    }
+  } catch(e) { /* non-fatal */ }
+
+  try {
+    const ridRes = await inhouseRidersPromise;
+    if (ridRes.ok) {
+      const ridJson = await ridRes.json();
+      if (ridJson.success) writeCache_(INHOUSE_RIDERS_CACHE_KEY, ridJson);
+    }
+  } catch(e) { /* non-fatal */ }
 }
 
-// On page open: render instantly from whatever's saved locally — no network
-// call, no loading time. Only falls back to a live fetch if nothing has ever
-// been saved on this browser yet (e.g. never refreshed on this or the home page).
+// On page open: render instantly from whatever's saved locally for the
+// active type — no network call, no loading time. Falls back to a full live
+// refresh (which warms both types) only if nothing's ever been saved.
 function init(){
-  const cached = readCache_(CITIES_CACHE_KEY);
+  updateTypeUI_();
+  const key = activeType === 'inhouse' ? INHOUSE_CITIES_CACHE_KEY : CITIES_CACHE_KEY;
+  const cached = readCache_(key);
   if (cached) {
     applyCitiesJson(cached.data);
     setStatus('cached', '📦 Showing saved data from ' + formatRelativeTime_(cached.fetchedAt) + ' — click Refresh for the latest');
