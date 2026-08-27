@@ -28,8 +28,8 @@
 
   /* Header */
   header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:22px;border-bottom:1px solid var(--line);padding-bottom:18px;}
-  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 6px;}
-  h1{font-size:26px;margin:0;font-weight:700;letter-spacing:-0.01em;}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 6px;font-weight:700;}
+  h1{font-size:27px;margin:0;font-weight:800;letter-spacing:-0.015em;}
   .subtitle{color:var(--ink-soft);font-size:13.5px;margin-top:4px;}
   .status{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;color:var(--ink-soft);}
   .dot{width:7px;height:7px;border-radius:50%;background:#9aa39d;}
@@ -47,7 +47,7 @@
   /* Summary tiles */
   .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px;}
   .tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;}
-  .tile .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin-bottom:8px;}
+  .tile .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin-bottom:8px;font-weight:600;}
   .tile .value{font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:-0.01em;}
   .tile .value.bad{color:var(--bad);}
   .tile .value.accent{color:var(--accent);}
@@ -56,13 +56,13 @@
 
   /* Trend chart panel */
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:20px;}
-  .panel h3{margin:0 0 4px;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);}
+  .panel h3{margin:0 0 4px;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:700;}
   .panel .panel-sub{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:14px;}
 
   /* Filter panel */
   .filterpanel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px;}
   .filterpanel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
-  .filterpanel-head h3{margin:0;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);}
+  .filterpanel-head h3{margin:0;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:700;}
   .filtergrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
   .filtergroup label{display:block;font-size:11.5px;color:var(--ink-soft);margin-bottom:6px;}
   .filterrange{display:flex;align-items:center;gap:8px;}
@@ -86,7 +86,7 @@
   /* Table (list view) */
   .tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
   table{width:100%;border-collapse:collapse;font-size:13.5px;}
-  thead th{text-align:left;padding:11px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);border-bottom:1px solid var(--line);background:#fafbfa;position:sticky;top:0;}
+  thead th{text-align:left;padding:11px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);border-bottom:1px solid var(--line);background:#fafbfa;position:sticky;top:0;font-weight:700;}
   tbody td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:middle;}
   tbody tr:last-child td{border-bottom:none;}
   tbody tr:hover{background:#f9faf9;cursor:pointer;}
@@ -137,7 +137,6 @@
       <a class="btn" href="index.html" style="margin-bottom:10px;display:inline-block;">⚠ Cities Needing Attention</a>
       <p class="eyebrow">Ops · Cancellations</p>
       <h1>Cancelled GMV % by City</h1>
-      <p class="subtitle">Live view — pulled directly from the source sheet · click a city for its 3‑month trend &amp; pincode breakdown</p>
     </div>
     <div class="status">
       <span class="dot" id="statusDot"></span>
@@ -159,7 +158,7 @@
 
   <div class="panel">
     <h3>Pan-India Loss % trend</h3>
-    <p class="panel-sub" id="trendSub">March → April → May</p>
+    <p class="panel-sub" id="trendSub">Loading…</p>
     <div id="trendChart"></div>
   </div>
 
@@ -301,12 +300,40 @@ function formatRelativeTime_(ms){
 }
 
 let rawData = [];
-let historyData = {}; // { CITY_KEY: {customer_city, may, april, march} } — all cities, all 3 months
+let historyData = {}; // { CITY_KEY: {customer_city, <mk0>, <mk1>, <mk2>} } — all cities, all 3 months
 let dataAsOf = null;
 let sortKey = "loss_gmv_percent";
 let sortDir = "desc";
 let viewMode = "list";
 let activeType = localStorage.getItem(TYPE_KEY) || '3pl'; // '3pl' | 'inhouse'
+
+// ---- Month keys/labels — read from the API response, never hardcoded ----
+// month_keys[0]/month_labels[0] is always the current month (index 0 = newest).
+// Guessed from today's date only until the first real API/cache response
+// arrives, so the page has something sane to paint immediately.
+function guessMonthInfo_(){
+  const now = new Date();
+  const keys = [], labels = [];
+  for (let i = 0; i < 3; i++){
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    keys.push(d.toLocaleString('en-US', {month:'long'}).toLowerCase());
+    labels.push(d.toLocaleString('en-US', {month:'long', year:'numeric'}));
+  }
+  return { keys, labels };
+}
+let MONTH_KEYS = guessMonthInfo_().keys;
+let MONTH_LABELS = guessMonthInfo_().labels;
+function setMonthInfo_(json){
+  if (json && Array.isArray(json.month_keys) && json.month_keys.length === 3){
+    MONTH_KEYS = json.month_keys;
+    MONTH_LABELS = json.month_labels || MONTH_LABELS;
+  }
+}
+function shortMonth_(label){ return (label || '').split(' ')[0].slice(0,3); }
+function monthsPhrase_(){
+  const rev = MONTH_LABELS.slice().reverse().map(shortMonth_); // oldest -> newest
+  return rev.join(' → ');
+}
 
 function fmtINR(n){
   if (n === null || n === undefined || isNaN(n)) return "—";
@@ -347,6 +374,7 @@ function updateTypeUI_(){
 }
 
 function applyCitiesJson(json, statusFn){
+  setMonthInfo_(json);
   rawData = json.data.map(d => ({
     customer_city: d.customer_city,
     total_gmv: Number(d.total_gmv) || 0,
@@ -497,37 +525,37 @@ function renderTiles(rows, totalCount){
     : `Filtered view — ${rows.length} of ${totalCount} cities. Tiles above reflect this filtered set.`;
 }
 
-// Pan-India Loss % trend across March/April/May, aggregated from whatever
-// cities currently pass the active filters. Uses history data already
-// fetched in loadData() — no extra network call, so this recomputes
+// Pan-India Loss % trend across the 3 months in MONTH_KEYS, aggregated from
+// whatever cities currently pass the active filters. Uses history data
+// already fetched in loadData() — no extra network call, so this recomputes
 // instantly on every filter change. A city missing a given month simply
 // contributes 0/0 to that month's totals, so it doesn't skew the ratio.
 function renderPanIndiaTrend(rows){
-  const totals = {
-    march: {gmv:0, loss:0},
-    april: {gmv:0, loss:0},
-    may:   {gmv:0, loss:0}
-  };
+  const totals = {};
+  MONTH_KEYS.forEach(mk => totals[mk] = {gmv:0, loss:0});
   let missingMonths = new Set();
 
   rows.forEach(r => {
     const h = historyData[r.customer_city.toUpperCase()];
     if (!h) return;
-    ['march','april','may'].forEach(m => {
-      if (h[m]) {
-        totals[m].gmv += h[m].total_gmv;
-        totals[m].loss += h[m].loss;
+    MONTH_KEYS.forEach(mk => {
+      if (h[mk]) {
+        totals[mk].gmv += h[mk].total_gmv;
+        totals[mk].loss += h[mk].loss;
       } else {
-        missingMonths.add(m);
+        missingMonths.add(mk);
       }
     });
   });
 
-  const months = [
-    {label:'March', pct: totals.march.gmv > 0 ? totals.march.loss/totals.march.gmv : 0, loss: totals.march.loss},
-    {label:'April', pct: totals.april.gmv > 0 ? totals.april.loss/totals.april.gmv : 0, loss: totals.april.loss},
-    {label:'May',   pct: totals.may.gmv   > 0 ? totals.may.loss/totals.may.gmv     : 0, loss: totals.may.loss}
-  ];
+  // Oldest -> newest for left-to-right chart order
+  const orderedKeys = MONTH_KEYS.slice().reverse();
+  const orderedLabels = MONTH_LABELS.slice().reverse().map(shortMonth_);
+  const months = orderedKeys.map((mk, i) => ({
+    label: orderedLabels[i],
+    pct: totals[mk].gmv > 0 ? totals[mk].loss / totals[mk].gmv : 0,
+    loss: totals[mk].loss
+  }));
 
   const w = 700, h = 240, padL = 60, padR = 30, padT = 40, padB = 36;
   const maxPct = Math.max(...months.map(m => m.pct), 0.01) * 1.2;
@@ -562,8 +590,8 @@ function renderPanIndiaTrend(rows){
   document.getElementById('trendChart').innerHTML = svg;
 
   document.getElementById('trendSub').textContent = missingMonths.size
-    ? `March → April → May · reflects ${rows.length} currently filtered cities (some cities are missing data for one or more months, treated as 0 for that month)`
-    : `March → April → May · reflects ${rows.length} currently filtered cities`;
+    ? `${monthsPhrase_()} · reflects ${rows.length} currently filtered cities (some cities are missing data for one or more months, treated as 0 for that month)`
+    : `${monthsPhrase_()} · reflects ${rows.length} currently filtered cities`;
 }
 
 function setSort(key){
