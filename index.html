@@ -322,12 +322,21 @@ function openCity(cityName){
   window.location.href = 'city.html?city=' + encodeURIComponent(cityName) + '&type=' + activeType;
 }
 
-// Cache entries written before month_keys existed (or from a stale/different
-// month) don't carry it — treat those as invalid rather than falling back to
-// a guessed month that won't match the cached history's real keys, which
-// would silently render as 0.00%/₹0 everywhere instead of erroring visibly.
+// Schema version of the backend logic this front-end expects. Bump this
+// whenever Code.gs's SCHEMA_VERSION changes, so a backend logic fix (e.g.
+// the PincodeInhouse/Inhouse Rider forward-fill fix) invalidates any
+// already-cached client-side data automatically instead of silently
+// showing stale results until someone clicks Refresh.
+const EXPECTED_SCHEMA_VERSION = 2;
+
+// Cache entries written before month_keys existed, from a stale/different
+// month, or from an older backend schema version are all treated as
+// invalid — falling back to stale or mismatched data would silently render
+// wrong numbers (0.00%/₹0, or outdated pincode/rider counts) instead of
+// erroring visibly.
 function hasMonthKeys_(json){
-  return !!(json && Array.isArray(json.month_keys) && json.month_keys.length === 3);
+  return !!(json && Array.isArray(json.month_keys) && json.month_keys.length === 3
+    && json.schema_version === EXPECTED_SCHEMA_VERSION);
 }
 
 function updateTypeUI_(){
