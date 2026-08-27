@@ -378,6 +378,15 @@ function setMonthInfo_(json){
     MONTH_LABELS = json.month_labels || MONTH_LABELS;
   }
 }
+// Cache entries written before month_keys existed (or from a stale/different
+// month than a sibling cache entry) are treated as invalid — see
+// loadFromBestSource_ for why.
+function hasMonthKeys_(json){
+  return !!(json && Array.isArray(json.month_keys) && json.month_keys.length === 3);
+}
+function sameMonths_(a, b){
+  return hasMonthKeys_(a) && hasMonthKeys_(b) && a.month_keys.join('|') === b.month_keys.join('|');
+}
 function shortMonth_(label){ return (label || '').split(' ')[0].slice(0,3); }
 function monthsPhrase_(){
   const rev = MONTH_LABELS.slice().reverse().map(shortMonth_); // oldest -> newest
@@ -549,6 +558,10 @@ async function loadAll(){
 
 // Tries, in order: (1) data prefetched for every city by index.html/all-cities.html,
 // (2) this city's own per-type cache from a past visit, (3) a live fetch.
+// Cache entries written before month_keys existed (or from a stale/different
+// month than a sibling cache entry) are treated as invalid at each stage —
+// otherwise a mismatched month guess would silently render 0.00%/₹0 instead
+// of falling through to a source that actually has the data.
 function loadFromBestSource_(){
   if(!CITY_KEY){
     showError('No city was specified in the URL. Go back and click a city from the main dashboard.');
@@ -562,14 +575,17 @@ function loadFromBestSource_(){
 
   const citiesCache = readCache_(citiesCacheKey);
   const pinCache = readCache_(pinCacheKey);
-  if (citiesCache && citiesCache.data) setMonthInfo_(citiesCache.data);
+  const citiesValid = citiesCache && hasMonthKeys_(citiesCache.data);
+  if (citiesValid) setMonthInfo_(citiesCache.data);
   updateTypeUI_();
-  const hist = citiesCache && citiesCache.data && citiesCache.data.history && citiesCache.data.history[CITY_KEY];
-  const cityPincodes = pinCache && pinCache.data && pinCache.data.pincodes_by_city && pinCache.data.pincodes_by_city[CITY_KEY];
+  const hist = citiesValid && citiesCache.data.history && citiesCache.data.history[CITY_KEY];
+  const pinValid = citiesValid && pinCache && sameMonths_(citiesCache.data, pinCache.data);
+  const cityPincodes = pinValid && pinCache.data.pincodes_by_city && pinCache.data.pincodes_by_city[CITY_KEY];
 
   if (activeType === 'inhouse') {
     const riderCache = readCache_(INHOUSE_RIDERS_CACHE_KEY);
-    const cityRiders = riderCache && riderCache.data && riderCache.data.riders_by_city && riderCache.data.riders_by_city[CITY_KEY];
+    const riderValid = citiesValid && riderCache && sameMonths_(citiesCache.data, riderCache.data);
+    const cityRiders = riderValid && riderCache.data.riders_by_city && riderCache.data.riders_by_city[CITY_KEY];
     if (hist && hist[MONTH_KEYS[0]] && cityPincodes && cityRiders) {
       try{
         applyCityData_(hist, cityPincodes, cityRiders);
@@ -590,7 +606,7 @@ function loadFromBestSource_(){
   }
 
   const cached = readCache_(perCityCacheKey);
-  if (cached) {
+  if (cached && hasMonthKeys_(cached.data)) {
     try{
       applyDetailJson(cached.data);
       setStatus('cached', '📦 Showing saved data from ' + formatRelativeTime_(cached.fetchedAt) + ' — click Refresh for the latest');
