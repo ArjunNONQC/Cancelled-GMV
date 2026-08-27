@@ -27,8 +27,8 @@
 
   /* Header */
   header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:18px;}
-  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--bad);margin:0 0 6px;}
-  h1{font-size:26px;margin:0;font-weight:700;letter-spacing:-0.01em;}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--bad);margin:0 0 6px;font-weight:700;}
+  h1{font-size:27px;margin:0;font-weight:800;letter-spacing:-0.015em;}
   .subtitle{color:var(--ink-soft);font-size:13.5px;margin-top:4px;max-width:560px;}
   .headerRight{display:flex;flex-direction:column;align-items:flex-end;gap:10px;}
   .status{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;color:var(--ink-soft);}
@@ -49,14 +49,14 @@
   /* Summary tiles */
   .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px;}
   .tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;}
-  .tile .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin-bottom:8px;}
+  .tile .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin-bottom:8px;font-weight:600;}
   .tile .value{font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:-0.01em;}
   .tile .value.bad{color:var(--bad);}
   .tile .value.accent{color:var(--accent);}
 
   /* Filter panel */
   .filterpanel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:20px;}
-  .filterpanel h3{margin:0 0 4px;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);}
+  .filterpanel h3{margin:0 0 4px;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:700;}
   .filterpanel .fp-sub{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:14px;}
   .fp-row{display:flex;flex-wrap:wrap;align-items:center;gap:14px;}
   .fp-input-group{display:flex;align-items:center;gap:8px;}
@@ -130,7 +130,7 @@
     <div>
       <p class="eyebrow">Ops · Cancellations · Needs Action</p>
       <h1>Cities Needing Attention</h1>
-      <p class="subtitle" id="pageSubtitle">Cities whose Loss GMV % has stayed at or above the threshold for March, April, <b>and</b> May — not a one-off spike. Click a city to see its pincode-level breakdown.</p>
+      <p class="subtitle" id="pageSubtitle">Cities whose Loss GMV % has stayed at or above the threshold for the last 3 months — not a one-off spike. Click a city to see its pincode-level breakdown.</p>
     </div>
     <div class="headerRight">
       <div class="status">
@@ -153,7 +153,7 @@
 
   <div class="filterpanel">
     <h3>Threshold</h3>
-    <p class="fp-sub">Show cities where Loss GMV % was ≥ this value in March, April, AND May</p>
+    <p class="fp-sub" id="fpSub">Show cities where Loss GMV % was ≥ this value in all 3 of the last 3 months</p>
     <div class="fp-row">
       <div class="fp-input-group">
         <label for="thresholdInput">Loss % ≥</label>
@@ -259,9 +259,33 @@ function checkPassword(){
 }
 
 let activeType = localStorage.getItem(TYPE_KEY) || '3pl'; // '3pl' | 'inhouse'
-let historyData = {};   // { CITY_KEY: {customer_city, may, april, march} } — for whichever type is active
+let historyData = {};   // { CITY_KEY: {customer_city, <mk0>, <mk1>, <mk2>} } — for whichever type is active
 let dataAsOf = null;
 let threshold = 10;     // percent, e.g. 10 means 10%
+
+// ---- Month keys/labels — read from the API response, never hardcoded ----
+// month_keys[0]/month_labels[0] is always the current month (index 0 = newest).
+// Guessed from today's date only until the first real API/cache response
+// arrives, so the page has something sane to paint immediately.
+function guessMonthInfo_(){
+  const now = new Date();
+  const keys = [], labels = [];
+  for (let i = 0; i < 3; i++){
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    keys.push(d.toLocaleString('en-US', {month:'long'}).toLowerCase());
+    labels.push(d.toLocaleString('en-US', {month:'long', year:'numeric'}));
+  }
+  return { keys, labels };
+}
+let MONTH_KEYS = guessMonthInfo_().keys;
+let MONTH_LABELS = guessMonthInfo_().labels;
+function setMonthInfo_(json){
+  if (json && Array.isArray(json.month_keys) && json.month_keys.length === 3){
+    MONTH_KEYS = json.month_keys;
+    MONTH_LABELS = json.month_labels || MONTH_LABELS;
+  }
+}
+function shortMonth_(label){ return (label || '').split(' ')[0].slice(0,3); }
 
 function fmtINR(n){
   if (n === null || n === undefined || isNaN(n)) return "—";
@@ -301,14 +325,20 @@ function openCity(cityName){
 function updateTypeUI_(){
   document.getElementById('type3pl').classList.toggle('active', activeType === '3pl');
   document.getElementById('typeInhouse').classList.toggle('active', activeType === 'inhouse');
+  const rev = MONTH_LABELS.slice().reverse().map(shortMonth_); // oldest -> newest
+  const monthsPhrase = rev.length === 3 ? `${rev[0]}, ${rev[1]}, <b>and</b> ${rev[2]}` : rev.join(', ');
   document.getElementById('pageSubtitle').innerHTML = activeType === 'inhouse'
-    ? 'Inhouse cities whose Loss GMV % has stayed at or above the threshold for March, April, <b>and</b> May. Click a city to see pincodes and rider-level detail.'
-    : 'Cities whose Loss GMV % has stayed at or above the threshold for March, April, <b>and</b> May — not a one-off spike. Click a city to see its pincode-level breakdown.';
+    ? `Inhouse cities whose Loss GMV % has stayed at or above the threshold for ${monthsPhrase}. Click a city to see pincodes and rider-level detail.`
+    : `Cities whose Loss GMV % has stayed at or above the threshold for ${monthsPhrase} — not a one-off spike. Click a city to see its pincode-level breakdown.`;
+  const fpSub = document.getElementById('fpSub');
+  if (fpSub) fpSub.textContent = `Show cities where Loss GMV % was ≥ this value in ${rev.join(', ')}`;
 }
 
 function applyCitiesJson(json){
+  setMonthInfo_(json);
   historyData = json.history || {};
   dataAsOf = (json.summary && json.summary.data_date) ? json.summary.data_date : null;
+  updateTypeUI_();
   render();
 }
 
@@ -424,48 +454,45 @@ function init(){
   }
 }
 
-// A city qualifies only if it has data for ALL THREE months (March, April, May)
+// A city qualifies only if it has data for ALL THREE months (per MONTH_KEYS)
 // AND every one of those three months' Loss GMV % is >= the chosen threshold.
-// A city missing a month (e.g. no March record) is excluded rather than assumed
-// 0% or ignored — we can't call a trend "consistent" without all 3 data points.
+// A city missing a month is excluded rather than assumed 0% or ignored — we
+// can't call a trend "consistent" without all 3 data points.
 function getEligibleCities(thresholdPct){
   const thresholdRatio = thresholdPct / 100;
   const eligible = [];
 
   Object.keys(historyData).forEach(key => {
     const h = historyData[key];
-    if (!h.march || !h.april || !h.may) return; // incomplete history -> excluded
+    if (MONTH_KEYS.some(mk => !h[mk])) return; // incomplete history -> excluded
 
-    const mPct = h.march.loss_gmv_percent;
-    const aPct = h.april.loss_gmv_percent;
-    const yPct = h.may.loss_gmv_percent;
-
-    if (mPct >= thresholdRatio && aPct >= thresholdRatio && yPct >= thresholdRatio) {
-      eligible.push({ customer_city: h.customer_city, march: h.march, april: h.april, may: h.may });
+    if (MONTH_KEYS.every(mk => h[mk].loss_gmv_percent >= thresholdRatio)) {
+      eligible.push(h); // h already has {customer_city, <mk0>, <mk1>, <mk2>}
     }
   });
 
-  // Worst first, by current (May) Loss %
-  eligible.sort((a, b) => b.may.loss_gmv_percent - a.may.loss_gmv_percent);
+  // Worst first, by current month's Loss %
+  eligible.sort((a, b) => b[MONTH_KEYS[0]].loss_gmv_percent - a[MONTH_KEYS[0]].loss_gmv_percent);
   return eligible;
 }
 
-function trendInfo(aprilPct, mayPct){
-  const diff = mayPct - aprilPct;
+// prevPct = the month before, currentPct = the current month
+function trendInfo(prevPct, currentPct){
+  const diff = currentPct - prevPct;
   if (diff > 0.0005) return { cls: 'up', symbol: '↑', label: 'Worsening' };
   if (diff < -0.0005) return { cls: 'down', symbol: '↓', label: 'Improving' };
   return { cls: 'flat', symbol: '→', label: 'Stable' };
 }
 
-function sparklineSVG(march, april, may){
-  const vals = [march, april, may];
+// vals must be ordered oldest -> newest (matches the reversed MONTH_KEYS order)
+function sparklineSVG(vals){
   const w = 100, h = 30, pad = 4;
   const maxV = Math.max(...vals, 0.001) * 1.15;
   const x = i => pad + i * ((w - 2*pad) / (vals.length - 1));
   const y = v => pad + (h - 2*pad) * (1 - v / maxV);
   const pts = vals.map((v,i) => ({x: x(i), y: y(v)}));
   const path = pts.map((p,i) => (i===0?'M':'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
-  const lastColor = pctTier(vals[2]).fill;
+  const lastColor = pctTier(vals[vals.length - 1]).fill;
   const dots = pts.map((p,i) => {
     const r = i === pts.length-1 ? 3 : 2;
     const c = i === pts.length-1 ? lastColor : '#c9cdcb';
@@ -485,14 +512,15 @@ function renderTiles(eligible){
     `;
     return;
   }
-  const totalGmv = eligible.reduce((s,r)=>s+r.may.total_gmv,0);
-  const totalLoss = eligible.reduce((s,r)=>s+r.may.loss,0);
+  const totalGmv = eligible.reduce((s,r)=>s+r[MONTH_KEYS[0]].total_gmv,0);
+  const totalLoss = eligible.reduce((s,r)=>s+r[MONTH_KEYS[0]].loss,0);
   const avgPct = totalGmv > 0 ? totalLoss/totalGmv : 0;
+  const curLabel = shortMonth_(MONTH_LABELS[0]);
 
   const tiles = [
     {label:'Cities at risk', value: eligible.length, cls:'bad'},
-    {label:'Total Loss (May)', value: fmtCr(totalLoss), cls:'bad'},
-    {label:'Avg Loss % (May)', value: (avgPct*100).toFixed(2)+'%', cls:'bad'},
+    {label:`Total Loss (${curLabel})`, value: fmtCr(totalLoss), cls:'bad'},
+    {label:`Avg Loss % (${curLabel})`, value: (avgPct*100).toFixed(2)+'%', cls:'bad'},
     {label:'Threshold applied', value: '≥ ' + threshold + '%', cls:''},
   ];
   document.getElementById('tiles').innerHTML = tiles.map(t =>
@@ -509,22 +537,26 @@ function renderGrid(eligible){
   slot.innerHTML = '<div class="cardgrid" id="cardgrid"></div>';
   const grid = document.getElementById('cardgrid');
 
+  const shortLabels = MONTH_LABELS.map(shortMonth_); // [current, prev1, prev2]
+
   grid.innerHTML = eligible.map(r => {
-    const mPct = r.march.loss_gmv_percent, aPct = r.april.loss_gmv_percent, yPct = r.may.loss_gmv_percent;
-    const tier = pctTier(yPct);
-    const trend = trendInfo(aPct, yPct);
+    const curPct = r[MONTH_KEYS[0]].loss_gmv_percent;
+    const prev1Pct = r[MONTH_KEYS[1]].loss_gmv_percent;
+    const prev2Pct = r[MONTH_KEYS[2]].loss_gmv_percent;
+    const tier = pctTier(curPct);
+    const trend = trendInfo(prev1Pct, curPct);
     return `<div class="pcard ${tier.tier}" onclick="openCity('${r.customer_city.replace(/'/g,"\\'")}')">
       <div class="pcard-top">
         <div class="pcard-city">${r.customer_city}</div>
         <div class="pcard-trend ${trend.cls}">${trend.symbol} ${trend.label}</div>
       </div>
-      <div class="pcard-pct">${fmtPct(yPct)}</div>
-      <div class="pcard-pct-label">Loss GMV % · May</div>
-      <div class="pcard-months">Mar ${fmtPct(mPct)} · Apr ${fmtPct(aPct)} · May ${fmtPct(yPct)}</div>
-      <div class="pcard-spark">${sparklineSVG(mPct, aPct, yPct)}</div>
+      <div class="pcard-pct">${fmtPct(curPct)}</div>
+      <div class="pcard-pct-label">Loss GMV % · ${shortLabels[0]}</div>
+      <div class="pcard-months">${shortLabels[2]} ${fmtPct(prev2Pct)} · ${shortLabels[1]} ${fmtPct(prev1Pct)} · ${shortLabels[0]} ${fmtPct(curPct)}</div>
+      <div class="pcard-spark">${sparklineSVG([prev2Pct, prev1Pct, curPct])}</div>
       <div class="pcard-stats">
-        <div>GMV<b>${fmtLakh(r.may.total_gmv)}</b></div>
-        <div>Loss<b>${fmtLakh(r.may.loss)}</b></div>
+        <div>GMV<b>${fmtLakh(r[MONTH_KEYS[0]].total_gmv)}</b></div>
+        <div>Loss<b>${fmtLakh(r[MONTH_KEYS[0]].loss)}</b></div>
       </div>
     </div>`;
   }).join('');
