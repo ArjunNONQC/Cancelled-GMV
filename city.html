@@ -81,6 +81,8 @@
   .sortbar{display:flex;gap:6px;flex-wrap:wrap;}
   .sortbtn{border:1px solid var(--line);background:var(--panel);padding:7px 12px;border-radius:7px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;font-family:var(--sans);}
   .sortbtn.active{border-color:var(--accent);color:var(--accent);background:var(--good-bg);}
+  .ridersortbtn{border:1px solid var(--line);background:var(--panel);padding:7px 12px;border-radius:7px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;font-family:var(--sans);}
+  .ridersortbtn.active{border-color:var(--accent);color:var(--accent);background:var(--good-bg);}
   .viewtoggle{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;}
   .viewtoggle button{border:none;background:var(--panel);padding:7px 12px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;font-family:var(--sans);}
   .viewtoggle button.active{background:var(--accent);color:#fff;}
@@ -247,11 +249,55 @@
 
   <!-- ===== Riders section (Inhouse only) ===== -->
   <div id="riderSection" style="display:none;">
-    <div class="controls">
-      <span style="font-size:13px;color:var(--ink-soft);" id="riderSubtext">Riders operating in this city — worst loss first</span>
-      <span class="count" id="riderRowCount" style="margin-left:auto;"></span>
+    <div class="filterpanel">
+      <div class="filterpanel-head">
+        <h3 id="riderFilterHeading">Rider range filters</h3>
+        <button class="clearbtn" onclick="clearRiderFilters()">Clear all filters</button>
+      </div>
+      <div class="filtergrid">
+        <div class="filtergroup">
+          <label>Total GMV (₹)</label>
+          <div class="filterrange">
+            <input type="number" id="riderGmvMin" placeholder="Min" oninput="applyRiderFilters()">
+            <span>–</span>
+            <input type="number" id="riderGmvMax" placeholder="Max" oninput="applyRiderFilters()">
+          </div>
+        </div>
+        <div class="filtergroup">
+          <label>Loss (₹, absolute)</label>
+          <div class="filterrange">
+            <input type="number" id="riderLossMin" placeholder="Min" oninput="applyRiderFilters()">
+            <span>–</span>
+            <input type="number" id="riderLossMax" placeholder="Max" oninput="applyRiderFilters()">
+          </div>
+        </div>
+        <div class="filtergroup">
+          <label>Loss GMV % (e.g. 50 = 50%)</label>
+          <div class="filterrange">
+            <input type="number" id="riderPctMin" placeholder="Min" oninput="applyRiderFilters()">
+            <span>–</span>
+            <input type="number" id="riderPctMax" placeholder="Max" oninput="applyRiderFilters()">
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="tablewrap">
+
+    <div class="controls">
+      <input id="riderSearch" type="text" placeholder="Search a rider…" oninput="applyRiderFilters()">
+      <div class="sortbar">
+        <button class="ridersortbtn" data-key="loss" onclick="setRiderSort('loss')">Loss ₹ ↓</button>
+        <button class="ridersortbtn" data-key="loss_gmv_percent" onclick="setRiderSort('loss_gmv_percent')">Loss %</button>
+        <button class="ridersortbtn" data-key="total_gmv" onclick="setRiderSort('total_gmv')">GMV</button>
+        <button class="ridersortbtn" data-key="rider_details" onclick="setRiderSort('rider_details')">Rider A–Z</button>
+      </div>
+      <div class="viewtoggle">
+        <button id="riderViewListBtn" class="active" onclick="setRiderView('list')">☰ List</button>
+        <button id="riderViewGridBtn" onclick="setRiderView('grid')">▦ Grid</button>
+      </div>
+      <span class="count" id="riderRowCount"></span>
+    </div>
+
+    <div class="tablewrap" id="riderListWrap">
       <table>
         <thead>
           <tr>
@@ -265,6 +311,16 @@
         <tbody id="riderTbody"></tbody>
       </table>
       <div class="empty" id="emptyStateRiders" style="display:none;">No rider data for this city.</div>
+    </div>
+
+    <div class="gridwrap" id="riderGridWrap">
+      <div class="cubegrid" id="ridercubegrid"></div>
+      <div class="empty" id="emptyStateRidersGrid" style="display:none;">No riders match your filters.</div>
+      <div class="legend">
+        <span><i style="background:var(--accent)"></i> Loss % below 2.5% — healthy</span>
+        <span><i style="background:var(--warn)"></i> 2.5%–6% — watch</span>
+        <span><i style="background:var(--bad)"></i> Above 6% — critical</span>
+      </div>
     </div>
   </div>
 
@@ -355,6 +411,7 @@ let sortDir = "desc";
 let viewMode = "list";
 let riderSortKey = "loss";
 let riderSortDir = "desc";
+let riderViewMode = "list";
 
 // ---- Month keys/labels — read from the API response, never hardcoded ----
 // month_keys[0]/month_labels[0] is always the current month (index 0 = newest).
@@ -378,11 +435,19 @@ function setMonthInfo_(json){
     MONTH_LABELS = json.month_labels || MONTH_LABELS;
   }
 }
-// Cache entries written before month_keys existed (or from a stale/different
-// month than a sibling cache entry) are treated as invalid — see
-// loadFromBestSource_ for why.
+// Schema version of the backend logic this front-end expects. Bump this
+// whenever Code.gs's SCHEMA_VERSION changes, so a backend logic fix (e.g.
+// the PincodeInhouse/Inhouse Rider forward-fill fix) invalidates any
+// already-cached client-side data automatically instead of silently
+// showing stale results until someone clicks Refresh.
+const EXPECTED_SCHEMA_VERSION = 2;
+
+// Cache entries written before month_keys existed, from a stale/different
+// month than a sibling cache entry, or from an older backend schema version
+// are all treated as invalid — see loadFromBestSource_ for why.
 function hasMonthKeys_(json){
-  return !!(json && Array.isArray(json.month_keys) && json.month_keys.length === 3);
+  return !!(json && Array.isArray(json.month_keys) && json.month_keys.length === 3
+    && json.schema_version === EXPECTED_SCHEMA_VERSION);
 }
 function sameMonths_(a, b){
   return hasMonthKeys_(a) && hasMonthKeys_(b) && a.month_keys.join('|') === b.month_keys.join('|');
@@ -442,6 +507,8 @@ function updateTypeUI_(){
     : 'Current month summary, 3‑month trend, and pincode‑level breakdown';
   const pfHeading = document.getElementById('pincodeFilterHeading');
   if (pfHeading) pfHeading.textContent = `Pincode range filters (${shortMonth_(MONTH_LABELS[0])})`;
+  const rfHeading = document.getElementById('riderFilterHeading');
+  if (rfHeading) rfHeading.textContent = `Rider range filters (${shortMonth_(MONTH_LABELS[0])})`;
   if (activeType === '3pl' && activeSubView === 'riders') {
     setSubView('pincodes'); // riders view doesn't apply to 3PL — force back
   }
@@ -838,39 +905,137 @@ function renderGrid(rows){
   }).join('');
 }
 
-// Riders: worst loss first, no filters — a straightforward ranked list,
-// with the same 3-month sparkline trend as the pincode table.
-function renderRiders(){
+// Riders: same filter/search/sort/list-grid pattern as the pincode table,
+// plus the same 3-month sparkline trend.
+function clearRiderFilters(){
+  ['riderGmvMin','riderGmvMax','riderLossMin','riderLossMax','riderPctMin','riderPctMax'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('riderSearch').value = '';
+  applyRiderFilters();
+}
+
+function setRiderSort(key){
+  if(riderSortKey === key){
+    riderSortDir = riderSortDir === 'desc' ? 'asc' : 'desc';
+  }else{
+    riderSortKey = key;
+    riderSortDir = key === 'rider_details' ? 'asc' : 'desc';
+  }
+  document.querySelectorAll('.ridersortbtn').forEach(b=>b.classList.toggle('active', b.dataset.key===riderSortKey));
+  applyRiderFilters();
+}
+
+function setRiderView(mode){
+  riderViewMode = mode;
+  document.getElementById('riderViewListBtn').classList.toggle('active', mode==='list');
+  document.getElementById('riderViewGridBtn').classList.toggle('active', mode==='grid');
+  document.getElementById('riderListWrap').style.display = mode==='list' ? 'block' : 'none';
+  document.getElementById('riderGridWrap').style.display = mode==='grid' ? 'block' : 'none';
+}
+
+function applyRiderFilters(){
+  const q = document.getElementById('riderSearch').value.trim().toUpperCase();
+
+  const gmvMin = numOrNull('riderGmvMin'), gmvMax = numOrNull('riderGmvMax');
+  const lossMin = numOrNull('riderLossMin'), lossMax = numOrNull('riderLossMax');
+  const pctMinRaw = numOrNull('riderPctMin'), pctMaxRaw = numOrNull('riderPctMax');
+  const pctMin = pctMinRaw === null ? null : pctMinRaw/100;
+  const pctMax = pctMaxRaw === null ? null : pctMaxRaw/100;
+
+  let rows = riderData.filter(d => {
+    if(!d.rider_details.toUpperCase().includes(q)) return false;
+    if(gmvMin !== null && d.total_gmv < gmvMin) return false;
+    if(gmvMax !== null && d.total_gmv > gmvMax) return false;
+    if(lossMin !== null && d.loss < lossMin) return false;
+    if(lossMax !== null && d.loss > lossMax) return false;
+    const p = typeof d.loss_gmv_percent === 'number' ? d.loss_gmv_percent : null;
+    if(pctMin !== null && (p === null || p < pctMin)) return false;
+    if(pctMax !== null && (p === null || p > pctMax)) return false;
+    return true;
+  });
+
+  rows.sort((a,b)=>{
+    let av = a[riderSortKey], bv = b[riderSortKey];
+    if(riderSortKey === 'rider_details'){
+      return riderSortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    }
+    av = (typeof av === 'number') ? av : -Infinity;
+    bv = (typeof bv === 'number') ? bv : -Infinity;
+    return riderSortDir === 'asc' ? av - bv : bv - av;
+  });
+
+  document.getElementById('riderRowCount').textContent = rows.length + ' / ' + riderData.length + ' riders';
+  renderRiderRows(rows);
+  renderRiderGrid(rows);
+  window._filteredRiderRows = rows;
+}
+
+function renderRiderRows(rows){
   const tbody = document.getElementById('riderTbody');
   const empty = document.getElementById('emptyStateRiders');
-  document.getElementById('riderRowCount').textContent = riderData.length + ' rider' + (riderData.length===1?'':'s');
-  const sub = document.getElementById('riderSubtext');
-  if (sub) sub.textContent = `Riders operating in this city, ${shortMonth_(MONTH_LABELS[0])} — worst loss first`;
-
-  if (riderData.length === 0){
+  if(rows.length === 0){
     tbody.innerHTML = '';
     empty.style.display = 'block';
     return;
   }
   empty.style.display = 'none';
 
-  const sorted = [...riderData].sort((a,b) => b.loss - a.loss);
-  tbody.innerHTML = sorted.map(r => {
-    const c = pctTier(r.loss_gmv_percent);
+  const maxPct = Math.max(...rows.map(r => typeof r.loss_gmv_percent==='number' ? r.loss_gmv_percent : 0), 0.0001);
+
+  tbody.innerHTML = rows.map(r => {
+    const pct = r.loss_gmv_percent;
+    const numeric = typeof pct === 'number';
+    const c = pctTier(numeric ? pct : null);
+    const width = numeric ? Math.min(100, (pct / maxPct) * 100) : 0;
     return `<tr>
       <td class="city">${r.rider_details}</td>
       <td class="num">${fmtINR(r.total_gmv)}</td>
       <td class="num">${fmtINR(r.loss)}</td>
-      <td class="num"><span class="pct-pill" style="background:${c.pillBg};color:${c.pillFg}">${fmtPct(r.loss_gmv_percent)}</span></td>
+      <td class="num">
+        <div class="lossbar-cell">
+          <div class="lossbar-track"><div class="lossbar-fill" style="width:${width}%;background:${c.fill}"></div></div>
+          <span class="pct-pill" style="background:${c.pillBg};color:${c.pillFg}">${fmtPct(pct)}</span>
+        </div>
+      </td>
       <td style="text-align:center">${sparklineSVG(r.history)}</td>
     </tr>`;
   }).join('');
 }
 
+function renderRiderGrid(rows){
+  const grid = document.getElementById('ridercubegrid');
+  const empty = document.getElementById('emptyStateRidersGrid');
+  if(rows.length === 0){
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  grid.innerHTML = rows.map(r => {
+    const pct = r.loss_gmv_percent;
+    const numeric = typeof pct === 'number';
+    const c = pctTier(numeric ? pct : null);
+    return `<div class="cube ${c.tier}">
+      <div class="cube-city">${r.rider_details}</div>
+      <div class="cube-row"><span>GMV</span><b>${fmtINR(r.total_gmv)}</b></div>
+      <div class="cube-row"><span>Loss</span><b>${fmtINR(r.loss)}</b></div>
+      <div class="cube-pct">${fmtPct(pct)}</div>
+      <div style="margin-top:6px">${sparklineSVG(r.history)}</div>
+    </div>`;
+  }).join('');
+}
+
+// Kept as the entry point called from applyCityData_ — just re-applies
+// filters/sort so a city switch re-renders with whatever filters are set.
+function renderRiders(){
+  applyRiderFilters();
+}
+
 function downloadExcel(){
   if (activeType === 'inhouse' && activeSubView === 'riders') {
-    if (!riderData.length){ alert('No rider rows to export.'); return; }
-    const sheetData = [...riderData].sort((a,b)=>b.loss-a.loss).map(r => ({
+    const rows = window._filteredRiderRows || riderData;
+    if (!rows.length){ alert('No rider rows to export — adjust your filters.'); return; }
+    const sheetData = rows.map(r => ({
       'Rider': r.rider_details,
       'Total GMV': r.total_gmv,
       'Loss (₹)': r.loss,
@@ -904,6 +1069,7 @@ function downloadExcel(){
 }
 
 document.querySelector('.sortbtn[data-key="loss_gmv_percent"]').classList.add('active');
+document.querySelector('.ridersortbtn[data-key="loss"]').classList.add('active');
 init();
 </script>
 </body>
