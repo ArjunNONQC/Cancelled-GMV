@@ -518,8 +518,8 @@ async function loadAll(){
   setStatus('loading', 'Fetching city data…');
   document.getElementById('errorSlot').innerHTML = '';
 
-  const threePlPromise = fetchWithRetry(ENDPOINT + '?action=city_detail&city=' + encodeURIComponent(CITY_KEY), {cache:"no-store"});
-  const inhousePromise = fetchWithRetry(ENDPOINT + '?action=inhouse_city_detail&city=' + encodeURIComponent(CITY_KEY), {cache:"no-store"});
+  const threePlPromise = fetchWithRetry(ENDPOINT + '?action=city_detail&city=' + encodeURIComponent(CITY_KEY) + '&nocache=1', {cache:"no-store"});
+  const inhousePromise = fetchWithRetry(ENDPOINT + '?action=inhouse_city_detail&city=' + encodeURIComponent(CITY_KEY) + '&nocache=1', {cache:"no-store"});
 
   let applied = false;
 
