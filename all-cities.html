@@ -420,11 +420,11 @@ async function loadData(){
   setStatus('loading', 'Fetching latest data…');
   document.getElementById('errorSlot').innerHTML = '';
 
-  const threePlPromise = fetchWithRetry(ENDPOINT, {cache:"no-store"});
-  const threePlPinPromise = fetchWithRetry(ENDPOINT + '?action=all_pincodes', {cache:"no-store"});
-  const inhouseCitiesPromise = fetchWithRetry(ENDPOINT + '?action=inhouse_cities', {cache:"no-store"});
-  const inhousePinPromise = fetchWithRetry(ENDPOINT + '?action=inhouse_all_pincodes', {cache:"no-store"});
-  const inhouseRidersPromise = fetchWithRetry(ENDPOINT + '?action=inhouse_all_riders', {cache:"no-store"});
+  const threePlPromise = fetchWithRetry(ENDPOINT + '?nocache=1', {cache:"no-store"});
+  const threePlPinPromise = fetchWithRetry(ENDPOINT + '?action=all_pincodes&nocache=1', {cache:"no-store"});
+  const inhouseCitiesPromise = fetchWithRetry(ENDPOINT + '?action=inhouse_cities&nocache=1', {cache:"no-store"});
+  const inhousePinPromise = fetchWithRetry(ENDPOINT + '?action=inhouse_all_pincodes&nocache=1', {cache:"no-store"});
+  const inhouseRidersPromise = fetchWithRetry(ENDPOINT + '?action=inhouse_all_riders&nocache=1', {cache:"no-store"});
 
   let mainOk = false;
 
