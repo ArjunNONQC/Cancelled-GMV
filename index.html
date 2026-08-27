@@ -322,6 +322,14 @@ function openCity(cityName){
   window.location.href = 'city.html?city=' + encodeURIComponent(cityName) + '&type=' + activeType;
 }
 
+// Cache entries written before month_keys existed (or from a stale/different
+// month) don't carry it — treat those as invalid rather than falling back to
+// a guessed month that won't match the cached history's real keys, which
+// would silently render as 0.00%/₹0 everywhere instead of erroring visibly.
+function hasMonthKeys_(json){
+  return !!(json && Array.isArray(json.month_keys) && json.month_keys.length === 3);
+}
+
 function updateTypeUI_(){
   document.getElementById('type3pl').classList.toggle('active', activeType === '3pl');
   document.getElementById('typeInhouse').classList.toggle('active', activeType === 'inhouse');
@@ -351,7 +359,7 @@ function setType(type){
 
   const key = type === 'inhouse' ? INHOUSE_CITIES_CACHE_KEY : CITIES_CACHE_KEY;
   const cached = readCache_(key);
-  if (cached) {
+  if (cached && hasMonthKeys_(cached.data)) {
     applyCitiesJson(cached.data);
     setStatus('cached', '📦 Showing saved data from ' + formatRelativeTime_(cached.fetchedAt) + ' — click Refresh for the latest');
   } else {
@@ -446,7 +454,7 @@ function init(){
   updateTypeUI_();
   const key = activeType === 'inhouse' ? INHOUSE_CITIES_CACHE_KEY : CITIES_CACHE_KEY;
   const cached = readCache_(key);
-  if (cached) {
+  if (cached && hasMonthKeys_(cached.data)) {
     applyCitiesJson(cached.data);
     setStatus('cached', '📦 Showing saved data from ' + formatRelativeTime_(cached.fetchedAt) + ' — click Refresh for the latest');
   } else {
